@@ -122,6 +122,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hostile/server exec prisma generate
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Start a silent sound server, so Firefox can run its audio engine
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio
+          pulseaudio --daemonize=yes --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=silent
+          pactl set-default-sink silent
+          pactl info
       - run: pnpm livekit:install
       - run: pnpm setup:local -- --no-seed
       - run: pnpm test:e2e:engines

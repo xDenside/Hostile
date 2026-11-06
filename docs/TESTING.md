@@ -158,8 +158,10 @@ the call goes to standard with no toast, a note in Settings and the reason in Di
 microphone keeps sending; a chosen strong that cannot start still raises the toast; and a browser with
 no AudioWorklet starts on standard without trying. `e2e/phone-background.spec.ts` adds the iPhone:
 falling behind three times while in the background does not end strong, and the same once in front
-ends it quietly. `e2e/other-engines.spec.ts` checks in WebKit, desktop and iPhone, that a new profile
-starts on strong and that the app's own `SuppressorProcessor` starts FastEnhancer there at 48 kHz.
+ends it quietly. `e2e/other-engines.spec.ts` checks in Firefox, and in WebKit on desktop and iPhone,
+that a new profile starts on strong and that the app's own `SuppressorProcessor` starts FastEnhancer
+there at 48 kHz. Firefox on Linux cannot start its audio engine without a sound server, so the CI job
+starts PulseAudio with a silent output first.
 
 ### How the call-tile test measures the avatar
 
