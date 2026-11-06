@@ -1,0 +1,60 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 73962f9..5c63cbc 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -2,6 +2,11 @@ import { JoinRoom, JoinRoomConfig, pauseRelayReconnection, resumeRelayReconnecti
+ export type * from "@trystero-p2p/core";
+ //#region src/index.d.ts
+ export type NostrRoomConfig = JoinRoomConfig;
++export interface RelaySeal {
++    seal(text: string): Promise<string>;
++    open(sealed: unknown): Promise<string | null>;
++}
++export declare const setRelaySeal: (seal: RelaySeal | null) => void;
+ export declare const createEvent: (topic: string, content: string) => Promise<string>;
+ export declare const subscribe: (subId: string, topic: string) => string;
+ export declare const joinRoom: JoinRoom<NostrRoomConfig>;
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 2445288..eb0f019 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -42,7 +42,13 @@ const retireRelay = (client) => {
+ };
+ const now = () => Math.floor(Date.now() / 1e3);
+ const topicToKind = (topic) => kindCache[topic] ??= strToNum(topic, 1e4) + 2e4;
+-const createEvent = async (topic, content) => {
++let relaySeal = null;
++let opening = Promise.resolve();
++const setRelaySeal = (seal) => {
++	relaySeal = seal;
++};
++const createEvent = async (topic, plainContent) => {
++	const content = relaySeal ? await relaySeal.seal(plainContent) : plainContent;
+ 	const payload = {
+ 		kind: topicToKind(topic),
+ 		tags: [[tag, topic]],
+@@ -231,7 +237,14 @@ const joinRoom = createTopicStrategy({
+ 				const batcher = batchers[client.url];
+ 				if (batcher?.subIds.includes(subId) && payload.tags) {
+ 					const topicTag = payload.tags.find((t) => t[0] === tag);
+-					if (topicTag?.[1]) batcher.topics.get(topicTag[1])?.(topicTag[1], payload.content);
++					if (topicTag?.[1]) {
++						const deliver = (content) => batchers[client.url]?.topics.get(topicTag[1])?.(topicTag[1], content);
++						const seal = relaySeal;
++						if (!seal) deliver(payload.content);
++						else opening = opening.then(() => seal.open(payload.content)).then((content) => {
++							if (content !== null) deliver(content);
++						}).catch(() => {});
++					}
+ 				}
+ 			}
+ 		}, () => resubscribeOnReconnect(client)));
+@@ -287,6 +300,6 @@ const defaultRelayUrls = [
+ 	"testr.nymble.world"
+ ].map((url) => "wss://" + url);
+ //#endregion
+-export { createEvent, defaultRelayUrls, getRelaySockets, joinRoom, pauseRelayReconnection, resumeRelayReconnection, selfId, subscribe };
++export { createEvent, defaultRelayUrls, getRelaySockets, joinRoom, pauseRelayReconnection, resumeRelayReconnection, selfId, setRelaySeal, subscribe };
+ 
+ //# sourceMappingURL=index.mjs.map
+\ No newline at end of file

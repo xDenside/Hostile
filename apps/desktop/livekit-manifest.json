@@ -1,0 +1,18 @@
+{
+  "comment": "The media server this app ships, per platform and architecture. Each host runs one server, so the versions need not match. scripts/livekit-install.mjs fetches nothing else. An empty sha256 means the file has not been downloaded and checked yet.",
+  "darwin-arm64": {
+    "version": "1.13.7",
+    "source": "copied at packaging time from /opt/homebrew/opt/livekit/bin/livekit-server",
+    "sha256": "2b06c267be38bae34e2314ea648826c39220f93bd9ed25286d6fc17585e28f91"
+  },
+  "win32-x64": {
+    "version": "1.13.11",
+    "source": "https://github.com/livekit/livekit/releases/download/v1.13.11/livekit_1.13.11_windows_amd64.zip",
+    "sha256": ""
+  },
+  "linux-x64": {
+    "version": "1.13.11",
+    "source": "https://github.com/livekit/livekit/releases/download/v1.13.11/livekit_1.13.11_linux_amd64.tar.gz",
+    "sha256": ""
+  }
+}

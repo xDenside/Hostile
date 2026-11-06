@@ -1,0 +1,515 @@
+@use '../../styles/tokens.scss' as t;
+
+.media {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  width: 100%;
+  margin-block: var(--sp-1) 2px;
+}
+
+.box,
+.grid {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--border);
+    pointer-events: none;
+  }
+}
+
+.box {
+  background: var(--bg-input);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 3px;
+  width: 100%;
+}
+
+.cell {
+  position: relative;
+  min-width: 0;
+  background: var(--bg-input);
+}
+
+.imageButton {
+  @include t.reset-button;
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+    border-radius: inherit;
+  }
+  @media (hover: hover) {
+    &:hover .pictureReady {
+      opacity: 0.88;
+    }
+  }
+}
+
+.picture {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 180ms var(--ease);
+}
+
+.pictureContain {
+  object-fit: scale-down;
+}
+
+.pictureReady {
+  opacity: 1;
+}
+
+.pictureWaiting {
+  opacity: 0.45;
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--bg-video);
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  max-width: 360px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.cardIcon {
+  flex: none;
+  display: flex;
+  color: var(--text-muted);
+}
+
+.cardText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cardName {
+  @include t.truncate;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.cardLine {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.cardAction {
+  flex: none;
+  text-decoration: none;
+
+  @media (pointer: coarse) {
+    height: 40px;
+  }
+}
+
+.cellFailed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  background: var(--bg-elevated);
+}
+
+.retry {
+  @include t.reset-button;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: inline-size;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  @media (hover: hover) {
+    &:hover {
+      color: var(--text);
+    }
+  }
+}
+
+@container (max-width: 139px) {
+  .retryText {
+    display: none;
+  }
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.tileFailed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--danger);
+  pointer-events: none;
+}
+
+.tileBadge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-app) 72%, transparent);
+}
+
+.tileBadgeFailed {
+  left: auto;
+  right: 6px;
+  color: var(--danger-text);
+}
+
+.tilePercent {
+  position: absolute;
+  right: 6px;
+  bottom: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-app) 72%, transparent);
+}
+
+.tileTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  height: 3px;
+  background: var(--border-strong);
+}
+
+.tileFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 160ms linear;
+}
+
+.tray {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-2) 0;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 208px;
+  max-width: 100%;
+  padding: var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: var(--bg-overlay);
+  box-shadow: inset 0 0 0 1px var(--border);
+  animation: chip-in 180ms var(--ease);
+}
+
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+.chipThumb {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+}
+
+.chipMedia {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chipThumbIcon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-app) 72%, transparent);
+}
+
+.chipText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chipName {
+  @include t.truncate;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.chipSize {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.chipRemove {
+  flex: none;
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-app) 94%, transparent);
+  backdrop-filter: blur(12px);
+  overscroll-behavior: contain;
+  animation: viewer-in 160ms var(--ease);
+
+  &:focus {
+    outline: none;
+  }
+}
+
+@keyframes viewer-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.viewerBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: calc(var(--sp-2) + var(--titlebar-inset)) var(--sp-3) var(--sp-2) var(--sp-4);
+}
+
+.viewerName {
+  @include t.truncate;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.viewerCount {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.viewerDownload {
+  flex: none;
+  text-decoration: none;
+
+  @media (pointer: coarse) {
+    height: 40px;
+  }
+}
+
+.viewerStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 var(--sp-4) var(--sp-4);
+}
+
+.viewerImage {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 160ms var(--ease);
+}
+
+.viewerImageReady {
+  opacity: 1;
+}
+
+.viewerLoading,
+.viewerFailed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.viewerNav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-overlay) 88%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.viewerPrev {
+  left: 0;
+}
+
+.viewerNext {
+  right: 0;
+}
+
+@media (max-width: t.$bp-phone) {
+  .viewerBar {
+    gap: var(--sp-2);
+    padding-inline: var(--sp-3) var(--sp-1);
+  }
+  .viewerStage {
+    margin-inline: var(--sp-2);
+  }
+  .viewerPrev {
+    left: var(--sp-1);
+  }
+  .viewerNext {
+    right: var(--sp-1);
+  }
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: color-mix(in srgb, var(--bg-main) 82%, transparent);
+  backdrop-filter: blur(6px);
+  animation: viewer-in 120ms var(--ease);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: var(--sp-2);
+    border-radius: var(--radius-lg);
+    border: 1.5px dashed var(--border-strong);
+    pointer-events: none;
+  }
+
+  > * {
+    pointer-events: none;
+  }
+}
+
+.dropMessage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+
+  svg {
+    margin-bottom: var(--sp-2);
+    color: var(--text-2);
+  }
+  strong {
+    font-size: var(--fs-md);
+    font-weight: 500;
+    color: var(--text);
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "hostile",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "description": "Voice, screen sharing and text chat hosted from one person's own PC, with no rented server.",
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.11.0 <25"
+  },
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "check": "node scripts/doctor.mjs",
+    "setup:local": "node scripts/setup-local.mjs",
+    "livekit:install": "node scripts/livekit-install.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:desktop": "node scripts/dev-desktop.mjs",
+    "stack:status": "node scripts/stack.mjs status",
+    "db:seed:dev": "pnpm --filter @hostile/server run seed:dev",
+    "db:reset:DESTROY-LOCAL-DATA": "node scripts/destroy-local-data.mjs",
+    "typecheck": "pnpm -r --parallel run typecheck && tsc -p e2e/tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node scripts/test.mjs unit integration",
+    "test:unit": "node scripts/test.mjs unit",
+    "test:integration": "node scripts/test.mjs integration",
+    "test:e2e": "node scripts/test.mjs e2e",
+    "test:e2e:engines": "node scripts/test.mjs e2e-engines",
+    "test:e2e:desktop": "node scripts/test.mjs e2e-desktop",
+    "build": "pnpm --filter @hostile/web run build && pnpm --filter @hostile/server run build && pnpm --filter @hostile/desktop run build",
+    "package:desktop": "node scripts/package-desktop.mjs",
+    "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs",
+    "check:bundle-size": "node scripts/check-bundle-size.mjs",
+    "check:secrets": "node scripts/check-tracked-secrets.mjs",
+    "test:durability": "node scripts/durability-test.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.13.5",
+    "@types/ws": "8.18.1",
+    "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.12.0",
+    "prettier": "3.9.8",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "ws": "8.21.3"
+  }
+}

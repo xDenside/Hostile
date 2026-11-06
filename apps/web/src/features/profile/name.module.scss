@@ -1,0 +1,236 @@
+@use '../../styles/tokens.scss' as t;
+
+.name {
+  --name-c1: #9a9a9a;
+  --name-c2: #ffffff;
+  @include t.truncate;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+  padding-block: 0.08em;
+  line-height: 1.2;
+  position: relative;
+}
+
+.solid {
+  color: var(--name-c1);
+}
+
+.ownerMark {
+  display: inline-flex;
+  flex: none;
+  transform: translateY(0.13em);
+
+  svg {
+    width: 0.95em;
+    height: 0.95em;
+    fill: var(--text);
+    color: var(--text-on-accent);
+  }
+}
+
+.font-default {
+  font-family: inherit;
+}
+.font-unbounded {
+  font-family: 'Unbounded', var(--font);
+  font-weight: 700;
+  font-size: 0.86em;
+}
+.font-playfair {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 700;
+  font-size: 1.08em;
+}
+.font-pacifico,
+.font-caveat {
+  padding-inline: 0.15em 0.3em;
+  margin-inline: -0.15em -0.3em;
+  max-width: calc(100% + 0.45em);
+}
+.font-pacifico {
+  font-family: 'Pacifico', cursive;
+  font-weight: 400;
+  font-size: 1.04em;
+}
+.font-caveat {
+  font-family: 'Caveat', cursive;
+  font-weight: 700;
+  font-size: 1.26em;
+  line-height: 1.05;
+}
+.font-pixel {
+  font-family: 'Press Start 2P', monospace;
+  font-weight: 400;
+  font-size: 0.68em;
+  line-height: 1.6;
+}
+.font-mono {
+  font-family: 'JetBrains Mono', var(--font-mono);
+  font-weight: 700;
+  font-size: 0.94em;
+}
+.font-comfortaa {
+  font-family: 'Comfortaa', var(--font);
+  font-weight: 700;
+}
+.font-russo {
+  font-family: 'Russo One', var(--font);
+  font-weight: 400;
+}
+
+.effect-none {
+}
+
+.effect-gradient {
+  background: linear-gradient(95deg, var(--name-c1), var(--name-c2));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.effect-shine {
+  background: linear-gradient(105deg, var(--name-c1) 35%, var(--name-c2) 50%, var(--name-c1) 65%);
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.effect-neon {
+  color: var(--name-c1);
+  text-shadow:
+    0 0 5px color-mix(in srgb, var(--name-c1) 80%, transparent),
+    0 0 12px color-mix(in srgb, var(--name-c1) 55%, transparent);
+}
+
+.effect-marker {
+  padding-inline: 0.25em;
+  border-radius: 0.2em;
+  background: linear-gradient(
+    180deg,
+    transparent 42%,
+    color-mix(in srgb, var(--name-c1) 62%, transparent) 42%,
+    color-mix(in srgb, var(--name-c2) 28%, var(--name-c1) 62%) 94%,
+    transparent 94%
+  );
+}
+
+.effect-aurora {
+  background: linear-gradient(
+    90deg,
+    var(--name-c1),
+    var(--name-c2),
+    color-mix(in srgb, var(--name-c1) 55%, #9a9a9a),
+    var(--name-c1)
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.effect-glitch {
+  text-shadow:
+    1.2px 0 color-mix(in srgb, var(--name-c1) 85%, transparent),
+    -1.2px 0 color-mix(in srgb, var(--name-c2) 70%, transparent);
+}
+
+.effect-pop {
+  text-shadow:
+    1px 1px 0 var(--name-c1),
+    2px 2px 0 color-mix(in srgb, var(--name-c1) 55%, #000);
+}
+
+@mixin running {
+  &.live,
+  [data-avatar-host]:hover & {
+    @content;
+  }
+}
+
+.effect-shine {
+  @include running {
+    animation: name-shine 2.4s linear infinite;
+  }
+}
+
+.effect-aurora {
+  @include running {
+    animation: name-aurora 5s ease-in-out infinite alternate;
+  }
+}
+
+.effect-neon {
+  @include running {
+    animation: name-neon 3.2s ease-in-out infinite;
+  }
+}
+
+.effect-glitch {
+  @include running {
+    animation: name-glitch 2.2s steps(1) infinite;
+  }
+}
+
+.live[data-off-screen] {
+  animation-play-state: paused;
+}
+
+@keyframes name-shine {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes name-aurora {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
+}
+
+@keyframes name-neon {
+  0%,
+  100% {
+    text-shadow:
+      0 0 5px color-mix(in srgb, var(--name-c1) 80%, transparent),
+      0 0 12px color-mix(in srgb, var(--name-c1) 55%, transparent);
+  }
+  50% {
+    text-shadow:
+      0 0 8px var(--name-c1),
+      0 0 22px color-mix(in srgb, var(--name-c1) 80%, transparent);
+  }
+}
+
+@keyframes name-glitch {
+  0%,
+  86%,
+  100% {
+    text-shadow:
+      1.2px 0 color-mix(in srgb, var(--name-c1) 85%, transparent),
+      -1.2px 0 color-mix(in srgb, var(--name-c2) 70%, transparent);
+  }
+  88% {
+    text-shadow:
+      -2.5px 1px var(--name-c1),
+      2.5px -1px var(--name-c2);
+  }
+  91% {
+    text-shadow:
+      3px -1px var(--name-c1),
+      -3px 1px var(--name-c2);
+  }
+  94% {
+    text-shadow:
+      -1.5px 0 var(--name-c1),
+      1.5px 0 var(--name-c2);
+  }
+}

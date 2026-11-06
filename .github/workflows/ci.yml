@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Types, lint, format, secrets, unit tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm check:secrets
+      - run: pnpm test:unit
+      - run: pnpm build
+      - run: pnpm check:bundle-secrets --require-build
+      - run: pnpm check:bundle-size
+
+  integration:
+    name: Integration tests and durability
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: pnpm livekit:install
+      - run: pnpm setup:local -- --no-seed
+      - run: pnpm test:integration
+      - run: pnpm test:durability
+
+  e2e:
+    name: Browser tests in Chromium (real media through LiveKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm livekit:install
+      - run: pnpm setup:local -- --no-seed
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: playwright-report-chromium
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  e2e-tunnel:
+    name: Browser tests as guests through the tunnel
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm livekit:install
+      - run: pnpm setup:local -- --no-seed
+      - run: node scripts/test.mjs e2e --project=chromium
+        env:
+          E2E_TUNNEL_MODE: '1'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: playwright-report-tunnel
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  engines:
+    name: Browser tests in Firefox, WebKit and an iPhone profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - run: pnpm livekit:install
+      - run: pnpm setup:local -- --no-seed
+      - run: pnpm test:e2e:engines
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: playwright-report-engines
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  e2e-speech:
+    name: Noise suppression on synthesised speech (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: brew install livekit
+      - run: pnpm exec playwright install chromium
+      - run: pnpm setup:local -- --no-seed
+      - run: node scripts/test.mjs e2e --project=chromium-speech
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: playwright-report-speech
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  desktop:
+    name: Desktop app on macOS (real Electron, unpackaged)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hostile/server exec prisma generate
+      - run: brew install livekit
+      - run: pnpm exec playwright install chromium
+      - run: pnpm setup:local -- --no-seed
+      - run: pnpm test:e2e:desktop
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: desktop-test-results
+          path: test-results/
+          retention-days: 7

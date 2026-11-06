@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "./*.ts",
+    "../e2e-desktop/*.ts",
+    "../e2e-packaged/*.ts",
+    "../playwright.config.ts",
+    "../playwright.desktop.config.ts",
+    "../playwright.packaged.config.ts"
+  ]
+}

@@ -1,0 +1,4 @@
+@shiguredo/rnnoise-wasm, Apache-2.0.
+
+Read from LICENSE in github.com/shiguredo/rnnoise-wasm. The terms are the same as ../../LICENSE. The project's file names
+no copyright holder and the project has no NOTICE file, so there is nothing further to copy.

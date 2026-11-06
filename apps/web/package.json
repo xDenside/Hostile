@@ -1,0 +1,44 @@
+{
+  "name": "@hostile/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node ../../scripts/third-party-notices.mjs && tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource/caveat": "5.3.0",
+    "@fontsource/comfortaa": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/pacifico": "5.3.0",
+    "@fontsource/playfair-display": "5.3.0",
+    "@fontsource/press-start-2p": "5.3.0",
+    "@fontsource/russo-one": "5.3.0",
+    "@fontsource/unbounded": "5.3.0",
+    "@hostile/shared": "workspace:*",
+    "@sapphi-red/web-noise-suppressor": "0.4.0",
+    "engine.io-client": "6.6.6",
+    "fastenhancer-web": "0.1.1",
+    "livekit-client": "2.22.3",
+    "lucide-react": "1.47.0",
+    "motion": "14.9.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "socket.io-client": "4.8.3",
+    "trystero": "0.26.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "sass-embedded": "1.104.1",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}

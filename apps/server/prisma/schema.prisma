@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+enum ClientKind {
+  WEB
+  DESKTOP
+}
+
+model User {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  displayName       String
+  avatarColor       String
+  bannerColor       String?
+  nameFont          String    @default("default")
+  nameEffect        String    @default("none")
+  nameColor         String?
+  nameColor2        String?
+  customStatus      String?
+  avatarMediaId     String?   @db.Uuid
+  bannerMediaId     String?   @db.Uuid
+  role              Role      @default(MEMBER)
+  disabledAt        DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+
+  sessions         Session[]
+  messages         Message[]
+  readStates       ReadState[]
+  avatarMedia      ProfileMedia?       @relation("UserAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  bannerMedia      ProfileMedia?       @relation("UserBanner", fields: [bannerMediaId], references: [id], onDelete: SetNull)
+  ownedMedia       ProfileMedia[]      @relation("MediaOwner")
+  attachments      MessageAttachment[]
+
+  @@map("users")
+}
+
+model ProfileMedia {
+  id          String   @id @default(uuid(4)) @db.Uuid
+  ownerId     String   @db.Uuid
+  kind        String
+  contentType String
+  byteSize    Int
+  width       Int
+  height      Int
+  bytes       Bytes
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  owner    User   @relation("MediaOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  avatarOf User[] @relation("UserAvatar")
+  bannerOf User[] @relation("UserBanner")
+
+  @@index([ownerId, kind])
+  @@map("profile_media")
+}
+
+model Session {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  userId       String     @db.Uuid
+  tokenHash    String     @unique
+  client       ClientKind
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  lastUsedAt   DateTime   @default(now()) @db.Timestamptz(3)
+  revokedAt    DateTime?  @db.Timestamptz(3)
+  revokeReason String?
+  userAgent    String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+model Channel {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  name           String
+  type           ChannelType
+  position       Int         @default(0)
+  changeCounter  Int         @default(0)
+  lastMessageSeq Int         @default(0)
+  archivedAt     DateTime?   @db.Timestamptz(3)
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @db.Timestamptz(3)
+
+  messages    Message[]
+  readStates  ReadState[]
+  attachments MessageAttachment[]
+
+  @@index([archivedAt, position])
+  @@map("channels")
+}
+
+model Message {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  channelId   String    @db.Uuid
+  authorId    String    @db.Uuid
+  content     String
+  seq         Int
+  changeSeq   Int
+  clientNonce String    @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  editedAt    DateTime? @db.Timestamptz(3)
+  deletedAt   DateTime? @db.Timestamptz(3)
+  replyToId   String?   @db.Uuid
+
+  forwardedFromMessageId   String?   @db.Uuid
+  forwardedFromAuthorId    String?   @db.Uuid
+  forwardedFromChannelId   String?   @db.Uuid
+  forwardedFromChannelName String?
+  forwardedFromCreatedAt   DateTime? @db.Timestamptz(3)
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  replyTo              Message?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies              Message[] @relation("MessageReplies")
+  forwardedFromMessage Message?  @relation("MessageForwards", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
+  forwards             Message[] @relation("MessageForwards")
+
+  attachments MessageAttachment[]
+
+  @@unique([channelId, seq])
+  @@unique([channelId, changeSeq])
+  @@unique([authorId, clientNonce])
+  @@index([replyToId])
+  @@index([forwardedFromMessageId])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id          String   @id @default(uuid(4)) @db.Uuid
+  channelId   String   @db.Uuid
+  uploaderId  String   @db.Uuid
+  messageId   String?  @db.Uuid
+  position    Int      @default(0)
+  contentType String
+  fileName    String
+  byteSize    Int
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  uploader User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, position])
+  @@map("message_attachments")
+}
+
+model ReadState {
+  userId      String   @db.Uuid
+  channelId   String   @db.Uuid
+  lastReadSeq Int      @default(0)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@index([channelId])
+  @@map("read_states")
+}

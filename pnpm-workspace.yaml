@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  electron: true
+  esbuild: true
+  '@prisma/engines': true
+  prisma: true
+  electron-winstaller: false
+  '@parcel/watcher': false
+
+engineStrict: true
+
+fetchRetries: 5
+fetchTimeout: 120000
+
+patchedDependencies:
+  '@trystero-p2p/nostr@0.26.0': patches/@trystero-p2p__nostr@0.26.0.patch

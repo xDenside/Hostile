@@ -1,0 +1,21 @@
+All sounds in this folder are released under Creative Commons Zero (CC0):
+http://creativecommons.org/publicdomain/zero/1.0/
+They were trimmed, level-matched and encoded to mono MP3 here. "Slowed" means the
+recording is played slower, which also lowers it, by the factor shown.
+
+From Zulip's notification sounds by Stefan Mertens (static/audio/notification_sounds
+in github.com/zulip/zulip, which lists them as CC0 in docs/THIRDPARTY):
+
+  mute.mp3         down, slowed x0.78
+  unmute.mp3       zaping, slowed x0.85
+  leave.mp3        down, slowed x0.62
+  share-start.mp3  zaping, slowed x0.7
+  share-stop.mp3   down, slowed x0.7
+
+From "Interface Sounds" 1.0 by Kenney (www.kenney.nl), as kenney_interfaceSounds.zip
+on opengameart.org:
+
+  join.mp3         confirmation_001
+  deafen.mp3       minimize_006
+  undeafen.mp3     maximize_006
+  viewer-join.mp3  glass_001

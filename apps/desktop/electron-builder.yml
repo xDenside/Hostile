@@ -1,0 +1,71 @@
+appId: app.hostile.desktop
+productName: Hostile
+copyright: Hostile
+
+directories:
+  output: release
+  buildResources: build
+
+asar: true
+files:
+  - dist/**
+  - '!dist/**/*.map'
+  - package.json
+
+npmRebuild: false
+
+afterPack: ./scripts/after-pack.cjs
+
+extraResources:
+  - from: build/bin
+    to: bin
+  - from: ../web/public/third-party-notices.txt
+    to: licences/third-party-notices.txt
+  - from: node_modules/electron/dist/LICENSE
+    to: licences/electron-LICENSE.txt
+  - from: node_modules/electron/dist/LICENSES.chromium.html
+    to: licences/LICENSES.chromium.html
+
+publish: null
+
+mac:
+  category: public.app-category.social
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  minimumSystemVersion: '13.0'
+  identity: null
+  extendInfo:
+    NSMicrophoneUsageDescription: Hostile uses the microphone for voice chat with the people in your room.
+    NSAudioCaptureUsageDescription: Hostile can include the audio of the screen or window you share, so the others hear it too.
+    NSLocalNetworkUsageDescription: While you host a room, Hostile uses your local network so that a guest on the same network can connect to this computer directly.
+    NSCameraUsageDescription: null
+    NSBluetoothAlwaysUsageDescription: null
+    NSBluetoothPeripheralUsageDescription: null
+    LSMultipleInstancesProhibited: false
+
+dmg:
+  writeUpdateInfo: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+
+linux:
+  target:
+    - AppImage
+  category: Network

@@ -1,0 +1,645 @@
+@use '../../styles/tokens.scss' as t;
+
+.shell {
+  --sidebar-w: clamp(220px, 100vw - 560px, var(--sidebar-pref));
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  position: relative;
+  background: var(--bg-app);
+}
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-sidebar);
+}
+
+.sidebarResizer {
+  position: absolute;
+  z-index: 5;
+  inset: var(--titlebar-inset) -4px 0 auto;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0 3px;
+    border-radius: 1px;
+    background: var(--text-muted);
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease);
+  }
+
+  &:hover::after {
+    opacity: 1;
+    transition-delay: 150ms;
+  }
+  &:active::after,
+  &:focus-visible::after {
+    opacity: 1;
+    transition-delay: 0s;
+  }
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: calc(var(--header-h) + var(--panel-gap) + 1px + var(--titlebar-inset));
+  padding: calc(var(--panel-gap) + 1px + var(--titlebar-inset)) var(--sp-2) 0 var(--sp-4);
+  flex: none;
+
+  h1 {
+    @include t.truncate;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+}
+
+.headerActions {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.channelScroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-1) var(--sp-2) var(--sp-4);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-2) var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.channel {
+  @include t.reset-button;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 7px var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+  text-align: left;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+}
+
+.channelName {
+  @include t.truncate;
+  flex: 1;
+}
+
+.channelSelected {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.selectedPill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--bg-active);
+  pointer-events: none;
+}
+
+.channel > :not(.selectedPill) {
+  position: relative;
+  z-index: 1;
+}
+
+.channelUnread {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.unreadDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text);
+  flex: none;
+  animation: dot-in 320ms var(--ease-spring);
+}
+
+@keyframes dot-in {
+  from {
+    transform: scale(0);
+  }
+}
+
+.channelIcon {
+  flex: none;
+  color: var(--text-faint);
+  transition: color var(--dur) var(--ease);
+}
+
+.channel:hover .channelIcon {
+  color: var(--text-2);
+}
+
+.voiceParticipants {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 var(--sp-2) var(--sp-4);
+  padding: 0;
+  list-style: none;
+}
+
+.voiceParticipant {
+  @include t.reset-button;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  text-align: left;
+  padding: 3px var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  cursor: pointer;
+  animation: participant-in 260ms var(--ease);
+  transition: background var(--dur) var(--ease);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+@keyframes participant-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+.voiceParticipantsStale {
+  opacity: 0.65;
+  font-style: italic;
+}
+
+.participantName {
+  @include t.truncate;
+  flex: 1;
+  min-width: 0;
+}
+
+.participantIcons {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.muted {
+  color: var(--text);
+}
+
+.noMic {
+  color: var(--text-faint);
+}
+
+.sharing {
+  color: var(--text-on-accent);
+  background: var(--accent);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.joinVoiceHint {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  padding: 2px var(--sp-2) 0 var(--sp-4);
+}
+
+.dock {
+  flex: none;
+  margin: var(--sp-2) var(--sp-2) var(--panel-gap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-main);
+}
+
+.dockCall {
+  border-bottom: 1px solid var(--border);
+  animation: panel-in 260ms var(--ease);
+}
+
+.dockCallRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 40px;
+  padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+}
+
+.callProblem {
+  padding: 0 var(--sp-1) var(--sp-1);
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.signal {
+  display: inline-flex;
+  flex: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+
+  i {
+    width: 3px;
+    border-radius: 1px;
+    background: var(--border-strong);
+    transition: background var(--dur) var(--ease);
+
+    &:nth-child(1) {
+      height: 5px;
+    }
+    &:nth-child(2) {
+      height: 8px;
+    }
+    &:nth-child(3) {
+      height: 12px;
+    }
+  }
+
+  &[data-bars='1'] i:nth-child(1),
+  &[data-bars='2'] i:nth-child(-n + 2),
+  &[data-bars='3'] i {
+    background: var(--text);
+  }
+
+  &[data-lost] i {
+    background: var(--danger);
+  }
+
+  &[data-seeking] i {
+    animation: signal-seek 900ms ease-in-out infinite;
+
+    &:nth-child(2) {
+      animation-delay: 150ms;
+    }
+    &:nth-child(3) {
+      animation-delay: 300ms;
+    }
+  }
+}
+
+@keyframes signal-seek {
+  50% {
+    background: var(--text);
+  }
+}
+
+.callTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.callName {
+  @include t.truncate;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.callStateSpoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.voiceButtons {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+.retryLink {
+  @include t.reset-button;
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.userPanel {
+  height: calc(var(--card-h) + var(--panel-pad) - 1px);
+  padding: 0 var(--sp-1);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.userButton {
+  @include t.reset-button;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background var(--dur) var(--ease);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.userInfo {
+  min-width: 0;
+  flex: 1;
+  line-height: 1.25;
+}
+
+.userName {
+  @include t.truncate;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-main);
+}
+
+.mainHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: calc(var(--header-h) + var(--titlebar-inset));
+  padding: var(--titlebar-inset) var(--sp-3) 0 var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.mainHeaderTitle {
+  @include t.truncate;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  letter-spacing: -0.012em;
+  flex: 1;
+  min-width: 0;
+}
+
+.mainHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+}
+
+.connBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.connDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--speaking);
+}
+
+.connDotWarn {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--warning);
+}
+
+.connDotBad {
+  background: var(--danger);
+}
+
+.banners {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4) 0;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+}
+
+.members {
+  width: var(--members-w);
+  background: var(--bg-sidebar);
+  overflow-y: auto;
+  padding: calc(var(--panel-gap) + var(--sp-2)) var(--sp-2) var(--sp-4) 0;
+  border-top: var(--titlebar-inset) solid transparent;
+}
+
+.memberRow {
+  @include t.reset-button;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 5px var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  text-align: left;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+}
+
+.memberOffline {
+  opacity: 0.7;
+}
+
+.memberName {
+  @include t.truncate;
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: t.$bp-narrow) {
+  .members,
+  .membersToggle {
+    display: none;
+  }
+}
+
+.toggleDot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--bg-main);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.navScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(0, 0, 0, 0.62);
+}
+
+@media (max-width: t.$bp-phone) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(84vw, 320px);
+    border-right: 1px solid var(--border-strong);
+    box-shadow: 18px 0 40px rgba(0, 0, 0, 0.45);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition:
+      transform 240ms var(--ease),
+      visibility 0s linear 240ms;
+    touch-action: pan-y;
+  }
+
+  .sidebarOpen {
+    transform: none;
+    visibility: visible;
+    transition: transform 240ms var(--ease);
+  }
+
+  .main {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .content {
+    border-radius: 0;
+  }
+
+  .mainHeader {
+    gap: var(--sp-2);
+    padding-left: var(--sp-1);
+    padding-right: var(--sp-1);
+  }
+
+  .connBadge {
+    padding: 0;
+    background: none;
+    font-size: 0;
+    gap: 0;
+  }
+
+  .banners {
+    padding-inline: var(--sp-2);
+  }
+
+  .phoneCall {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    padding: var(--sp-1) var(--sp-2) var(--sp-2);
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+    animation: panel-in 260ms var(--ease);
+  }
+  .phoneCall .callTitle {
+    flex: none;
+    height: 22px;
+    padding-inline: var(--sp-1);
+  }
+  .callProblem {
+    padding: 0;
+  }
+  .phoneCallButtons {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 2px;
+
+    > span {
+      display: flex;
+    }
+    .callTile {
+      width: 100%;
+      height: 44px;
+    }
+    .callTile:not(.callTileDanger):not([aria-pressed='true']) {
+      background: var(--bg-hover);
+    }
+    .callTileDanger {
+      background: var(--danger-soft);
+    }
+  }
+}
