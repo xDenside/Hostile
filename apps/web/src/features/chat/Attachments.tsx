@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Download, Film, ImageOff, RotateCcw, VideoOff } f
 import type { AttachmentDTO } from '@hostile/shared';
 import { mediaUrl } from '../../api/client';
 import { cx, uiStyles } from '../../components/ui';
+import { useTunnel } from '../../tunnel/state';
 import {
   attachmentGrid,
   attachmentRuns,
@@ -63,6 +64,8 @@ function FileCard({
 }
 
 const IMAGE_FAILED = 'This image could not be loaded.';
+const FILES_BLOCKED =
+  'Images and videos from the room cannot be shown in this tab. Reloading the page, or another browser, may help.';
 
 function MediaRetry({ name, onRetry }: { name: string; onRetry: () => void }) {
   return (
@@ -131,12 +134,14 @@ function useImageSource(attachment: AttachmentDTO) {
   const [ready, setReady] = useState(preview !== null);
   const url = mediaUrl(attachment.url);
   const load = useMediaLoad(url);
+  const blocked = useTunnel((s) => s.filesBlocked) && !preview;
   return {
     src: preview?.url ?? url,
     drawnAt: preview,
     ready,
     attempt: load.attempt,
-    failed: load.failure === 'missing' || load.failure === 'broken',
+    failedLine: blocked ? FILES_BLOCKED : IMAGE_FAILED,
+    failed: blocked || load.failure === 'missing' || load.failure === 'broken',
     unreachable: load.failure === 'unreachable',
     tryAgain: load.tryAgain,
     loaded: () => {
@@ -160,7 +165,7 @@ function SingleImage({ attachment, onOpen }: { attachment: AttachmentDTO; onOpen
       <FileCard
         icon={<ImageOff size={18} aria-hidden />}
         name={attachment.fileName}
-        line={IMAGE_FAILED}
+        line={source.failedLine}
       />
     );
   }
@@ -214,10 +219,10 @@ function GridImage({
       data-attachment-id={attachment.id}
     >
       {source.failed ? (
-        <span className={styles.cellFailed} title={`${attachment.fileName}: ${IMAGE_FAILED}`}>
+        <span className={styles.cellFailed} title={`${attachment.fileName}: ${source.failedLine}`}>
           <ImageOff size={18} aria-hidden />
           <span className="visually-hidden">
-            {attachment.fileName}: {IMAGE_FAILED}
+            {attachment.fileName}: {source.failedLine}
           </span>
         </span>
       ) : source.unreachable ? (
@@ -288,6 +293,20 @@ function MountedVideo({
 }
 
 function VideoAttachment({ attachment }: { attachment: AttachmentDTO }) {
+  const blocked = useTunnel((s) => s.filesBlocked);
+  if (blocked) {
+    return (
+      <FileCard
+        icon={<VideoOff size={18} aria-hidden />}
+        name={attachment.fileName}
+        line={FILES_BLOCKED}
+      />
+    );
+  }
+  return <LoadedVideo attachment={attachment} />;
+}
+
+function LoadedVideo({ attachment }: { attachment: AttachmentDTO }) {
   const url = mediaUrl(attachment.url);
   const load = useMediaLoad(url);
   const box = useRef<HTMLDivElement>(null);

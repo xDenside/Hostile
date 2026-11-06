@@ -12,6 +12,8 @@ const SAMPLE_RATE = 48_000;
 
 const FASTENHANCER_MODEL = 'base';
 const FASTENHANCER_START_TIMEOUT_MS = 10_000;
+const AUDIO_ENGINE_TIMEOUT_MS = 15_000;
+const AUDIO_ENGINE_CLOSE_TIMEOUT_MS = 2_000;
 const OVERLOAD_REASON = 'this computer could not keep up with it';
 
 interface SuppressorNode {
@@ -25,6 +27,23 @@ interface Engine {
   prepare: () => Promise<void>;
   createNode: (context: AudioContext) => Promise<SuppressorNode>;
   highPassHz: number | null;
+}
+
+function withinTime<T>(work: Promise<T>, ms: number, message: () => string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message())), ms);
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
+function closeWithinTime(context: AudioContext): Promise<void> {
+  if (context.state === 'closed') return Promise.resolve();
+  return withinTime(
+    context.close(),
+    AUDIO_ENGINE_CLOSE_TIMEOUT_MS,
+    () => 'the browser did not close the audio engine in time',
+  ).catch(() => undefined);
 }
 
 function compiledOnce<T>(load: () => Promise<{ value: T; wasm: ArrayBuffer }>): () => Promise<T> {
@@ -178,8 +197,21 @@ export class SuppressorProcessor implements TrackProcessor<
     await spec.prepare();
     const context = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
     try {
-      await context.audioWorklet.addModule(spec.workletUrl);
-      if (context.state !== 'running') await context.resume().catch(() => undefined);
+      await withinTime(
+        context.audioWorklet.addModule(spec.workletUrl),
+        AUDIO_ENGINE_TIMEOUT_MS,
+        () => 'the browser did not load the noise suppressor in time',
+      );
+      if (context.state !== 'running') {
+        const resumed = context.resume().catch(() => undefined);
+        if (onIOS()) await resumed;
+        else
+          await withinTime(
+            resumed,
+            AUDIO_ENGINE_TIMEOUT_MS,
+            () => 'the browser did not start the audio engine in time',
+          );
+      }
       if (context.state !== 'running') {
         throw new Error(`the browser kept the audio engine ${context.state}`);
       }
@@ -230,7 +262,7 @@ export class SuppressorProcessor implements TrackProcessor<
       });
       return processor;
     } catch (err) {
-      await context.close().catch(() => undefined);
+      await closeWithinTime(context);
       throw err;
     }
   }
@@ -274,7 +306,11 @@ export class SuppressorProcessor implements TrackProcessor<
       return;
     }
     this.resumeTried = true;
-    await this.context.resume().catch(() => undefined);
+    await withinTime(
+      this.context.resume(),
+      AUDIO_ENGINE_TIMEOUT_MS,
+      () => 'resume timed out',
+    ).catch(() => undefined);
     if (this.destroyed) return;
     if (state() !== 'running') this.reportBroken('the browser stopped the audio engine');
   }
@@ -352,7 +388,7 @@ export class SuppressorProcessor implements TrackProcessor<
     this.destination.disconnect();
     this.processedTrack?.stop();
     this.processedTrack = undefined;
-    if (this.context.state !== 'closed') await this.context.close().catch(() => undefined);
+    await closeWithinTime(this.context);
   }
 }
 

@@ -175,11 +175,30 @@ test('first run hosts a room: code shown, only the media port off loopback, no s
 
     const stopButton = host.page.getByRole('button', { name: 'Stop hosting' });
     const newCodeButton = host.page.getByRole('button', { name: 'Make a new code' });
+    const scrolled = () =>
+      newCodeButton.evaluate((el) => {
+        let box = el.parentElement;
+        while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+        return box ? box.scrollTop : null;
+      });
+    console.log(
+      `host window: ${JSON.stringify(
+        await host.page.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+      )}`,
+    );
+    await stopButton.scrollIntoViewIfNeeded();
+    await newCodeButton.scrollIntoViewIfNeeded();
+    await host.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
     const buttonBefore = (await newCodeButton.boundingBox())!;
     const stopBefore = await stopButton.boundingBox();
+    const scrollBefore = await scrolled();
+    expect(scrollBefore, 'the Hosting panel scrolls inside its own container').not.toBeNull();
     await newCodeButton.click();
     const question = host.page.getByRole('group', { name: 'Cut everyone off?' });
     await host.page.waitForTimeout(300);
+    expect(await scrolled(), 'the panel did not scroll when the question appeared').toBe(
+      scrollBefore,
+    );
     expect(await stopButton.boundingBox()).toEqual(stopBefore);
     const box = (await question.boundingBox())!;
     expect(box.x + box.width).toBeCloseTo(buttonBefore.x + buttonBefore.width, 0);

@@ -21,6 +21,7 @@ export interface TunnelState {
   code: string | null;
   hostFingerprint: string | null;
   customRelay: string;
+  filesBlocked: boolean;
 }
 
 export const useTunnel = create<TunnelState>(() => ({
@@ -32,4 +33,5 @@ export const useTunnel = create<TunnelState>(() => ({
   code: null,
   hostFingerprint: null,
   customRelay: '',
+  filesBlocked: false,
 }));

@@ -162,11 +162,30 @@ export async function sendMessage(page: Page, channel: string, text: string) {
   await composer.press('Enter');
 }
 
-export async function joinVoice(page: Page, channelName: string) {
+export async function joinVoice(page: Page, channelName: string, who = 'this page') {
   await page.getByRole('button', { name: new RegExp(`^${channelName}`) }).click();
   const join = page.getByRole('button', { name: new RegExp(`^Join ${channelName}`) });
   if (await join.isVisible().catch(() => false)) await join.click();
-  await expect(page.getByTestId('voice-state')).toHaveText('Voice connected', { timeout: 30_000 });
+  try {
+    await expect(page.getByTestId('voice-state')).toHaveText('Voice connected', {
+      timeout: 30_000,
+    });
+  } catch (err) {
+    const alerts = await page
+      .getByRole('alert')
+      .allInnerTexts()
+      .catch(() => []);
+    const state = await page
+      .getByTestId('voice-state')
+      .textContent({ timeout: 1_000 })
+      .catch(() => null);
+    throw new Error(
+      `${who} did not get into the call. Call bar: ${state ?? 'gone'}. Alerts: ${
+        alerts.length ? alerts.join(' | ') : 'none'
+      }.\n${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
 }
 
 export async function openDiagnostics(page: Page) {

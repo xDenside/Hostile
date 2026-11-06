@@ -56,6 +56,7 @@ test.describe.serial('a room hosted in the real app, with a tab guest and an app
   let appGuest: Instance;
   let browser: Browser;
   let tab: Page;
+  const tabLogs: string[] = [];
   let code = '';
 
   test.beforeAll(async () => {
@@ -72,6 +73,7 @@ test.describe.serial('a room hosted in the real app, with a tab guest and an app
       .grantPermissions(['clipboard-read'], { origin: GUEST_URL })
       .catch(() => undefined);
     tab = await context.newPage();
+    tab.on('console', (message) => tabLogs.push(`tab console: ${message.text()}`));
     await tab.goto(GUEST_URL);
   });
 
@@ -273,7 +275,21 @@ test.describe.serial('a room hosted in the real app, with a tab guest and an app
     await expect(host.page.getByTestId('diag-noise-failures')).toHaveText('none');
     await closeModal(host.page);
     for (const page of [host.page, tab, appGuest.page]) await setNoiseMode(page, PINNED_NOISE_MODE);
-    for (const page of [tab, appGuest.page]) await joinVoice(page, 'General Voice');
+    try {
+      await joinVoice(tab, 'General Voice', 'the tab guest');
+      await joinVoice(appGuest.page, 'General Voice', 'the app guest');
+    } catch (err) {
+      const media = [...tabLogs, ...host.logs, ...appGuest.logs]
+        .join('\n')
+        .split('\n')
+        .filter((line) => /media server|livekit|\bice\b|webrtc|voice|connection/i.test(line))
+        .slice(-40)
+        .join('\n');
+      throw new Error(
+        `${err instanceof Error ? err.message : String(err)}\nTab, host and app guest media lines:\n${media || 'none'}`,
+        { cause: err },
+      );
+    }
     for (const page of [host.page, tab, appGuest.page]) {
       await expect(page.getByTestId('participant-tile')).toHaveCount(3, { timeout: 45_000 });
     }
