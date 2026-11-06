@@ -322,7 +322,9 @@ test.describe.serial('asking to join, through the real app', () => {
     await row.getByRole('button', { name: 'Remove' }).last().click();
     await expect(tab.page.getByTestId('join-ended')).toContainText('removed', { timeout: 20_000 });
     expect(Date.now() - startedAt).toBeLessThan(20_000);
+    await expect(row).toHaveCount(0, { timeout: 20_000 });
     await host.page.keyboard.press('Escape');
+    await expect(host.page.getByRole('navigation', { name: 'Settings sections' })).toHaveCount(0);
     await expect(host.page.getByText('Removed Person')).toHaveCount(0, { timeout: 20_000 });
     await shot(host.page, 'after-remove');
     await host.page

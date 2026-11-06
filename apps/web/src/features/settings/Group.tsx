@@ -64,11 +64,11 @@ export function ConfirmButton({
   return (
     <span
       className={styles.confirm}
-      data-own-escape
+      data-own-escape={!busy || undefined}
       role="group"
       aria-label={question}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') setAsking(false);
+        if (e.key === 'Escape' && !busy) setAsking(false);
       }}
     >
       <span className={styles.confirmQuestion}>{question}</span>
