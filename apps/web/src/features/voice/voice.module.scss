@@ -501,6 +501,13 @@
   }
 }
 
+.pickerNotices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
 .pickerTabs {
   display: flex;
   gap: var(--sp-1);

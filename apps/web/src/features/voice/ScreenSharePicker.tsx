@@ -70,12 +70,16 @@ export function ScreenSharePicker() {
 
   return (
     <Modal title="Share your screen" onClose={close} width={720}>
-      {error && <Banner kind="error">{error}</Banner>}
-      {bridge && caps?.screenPermission === 'denied' && (
-        <Banner kind="warning">
-          macOS is blocking screen recording for this app. Allow it in System Settings → Privacy
-          &amp; Security → Screen Recording, then restart Hostile.
-        </Banner>
+      {(error || (bridge && caps?.screenPermission === 'denied')) && (
+        <div className={styles.pickerNotices}>
+          {error && <Banner kind="error">{error}</Banner>}
+          {bridge && caps?.screenPermission === 'denied' && (
+            <Banner kind="warning">
+              macOS is blocking screen recording for this app. Allow it in System Settings → Privacy
+              &amp; Security → Screen Recording, then restart Hostile.
+            </Banner>
+          )}
+        </div>
       )}
 
       {bridge ? (

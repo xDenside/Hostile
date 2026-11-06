@@ -15,11 +15,14 @@ import type {
   ShortcutState,
 } from '@hostile/shared';
 import { CHANNEL, EVENT } from './channels.js';
+import { plainIpcError } from './ipc-error.js';
 
 const GLOBAL_NAME: typeof DESKTOP_BRIDGE_GLOBAL = 'hostileDesktop';
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
-  ipcRenderer.invoke(channel, ...args) as Promise<T>;
+  (ipcRenderer.invoke(channel, ...args) as Promise<T>).catch((err: unknown) => {
+    throw plainIpcError(err);
+  });
 
 function subscribe<T>(channel: string, listener: (value: T) => void): () => void {
   const wrapped = (_event: IpcRendererEvent, value: T) => listener(value);
