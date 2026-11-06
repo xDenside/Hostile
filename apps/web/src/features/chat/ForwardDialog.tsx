@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
-import { Film, Hash, Volume2 } from 'lucide-react';
+import { Film, Hash, ImageOff, Volume2 } from 'lucide-react';
 import type { ChannelDTO, MessageDTO } from '@hostile/shared';
 import { mediaUrl } from '../../api/client';
 import { Avatar, Banner, cx, EmptyState, Modal, Spinner, TextInput } from '../../components/ui';
 import { useCommunity } from '../../stores/community';
 import { toast } from '../../stores/ui';
 import { NameText } from '../profile/NameText';
-import { closeForward, forwardMessage, refusalMessage, useChat } from './store';
+import { useFilesBlocked } from './files-blocked';
+import { closeForward, deliveredPreview, forwardMessage, refusalMessage, useChat } from './store';
 import { quoteOf, quoteSummary } from './sync';
 import styles from './chat.module.scss';
 
@@ -18,10 +19,17 @@ export function Preview({ message }: { message: MessageDTO }) {
   const name = author?.displayName ?? 'Unknown member';
   const quote = quoteOf(message);
   const first = message.attachments[0];
+  const blocked = useFilesBlocked();
+  const thumb =
+    first?.kind === 'image' ? (deliveredPreview(first.id)?.url ?? mediaUrl(first.url)) : null;
   return (
     <div className={styles.forwardPreview} data-testid="forward-preview">
-      {first?.kind === 'image' ? (
-        <img className={styles.forwardThumb} src={mediaUrl(first.url)} alt="" draggable={false} />
+      {first?.kind === 'image' && blocked && !deliveredPreview(first.id) ? (
+        <span className={cx(styles.forwardThumb, styles.forwardThumbIcon)}>
+          <ImageOff size={16} aria-hidden />
+        </span>
+      ) : thumb ? (
+        <img className={styles.forwardThumb} src={thumb} alt="" draggable={false} />
       ) : first?.kind === 'video' ? (
         <span className={cx(styles.forwardThumb, styles.forwardThumbIcon)}>
           <Film size={16} aria-hidden />

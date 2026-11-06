@@ -3,7 +3,6 @@ import { AlertTriangle, Check, Download, Film, ImageOff, RotateCcw, VideoOff } f
 import type { AttachmentDTO } from '@hostile/shared';
 import { mediaUrl } from '../../api/client';
 import { cx, uiStyles } from '../../components/ui';
-import { useTunnel } from '../../tunnel/state';
 import {
   attachmentGrid,
   attachmentRuns,
@@ -17,6 +16,7 @@ import {
 } from './attachment-rules';
 import { LocalVideoFrame } from './AttachmentTray';
 import { AttachmentViewer } from './AttachmentViewer';
+import { FILES_BLOCKED, useFilesBlocked } from './files-blocked';
 import { useMediaLoad, useNearViewport, useVideoRelease } from './media-recovery';
 import {
   deliveredPreview,
@@ -64,8 +64,6 @@ function FileCard({
 }
 
 const IMAGE_FAILED = 'This image could not be loaded.';
-const FILES_BLOCKED =
-  'Images and videos from the room cannot be shown in this tab. Reloading the page, or another browser, may help.';
 
 function MediaRetry({ name, onRetry }: { name: string; onRetry: () => void }) {
   return (
@@ -134,7 +132,7 @@ function useImageSource(attachment: AttachmentDTO) {
   const [ready, setReady] = useState(preview !== null);
   const url = mediaUrl(attachment.url);
   const load = useMediaLoad(url);
-  const blocked = useTunnel((s) => s.filesBlocked) && !preview;
+  const blocked = useFilesBlocked() && !preview;
   return {
     src: preview?.url ?? url,
     drawnAt: preview,
@@ -293,7 +291,7 @@ function MountedVideo({
 }
 
 function VideoAttachment({ attachment }: { attachment: AttachmentDTO }) {
-  const blocked = useTunnel((s) => s.filesBlocked);
+  const blocked = useFilesBlocked();
   if (blocked) {
     return (
       <FileCard
@@ -371,6 +369,10 @@ export function Attachments({ attachments }: { attachments: AttachmentDTO[] }) {
   const images = useMemo(() => attachments.filter((a) => a.kind === 'image'), [attachments]);
   const runs = useMemo(() => attachmentRuns(attachments), [attachments]);
   const [viewing, setViewing] = useState<number | null>(null);
+  const blocked = useFilesBlocked();
+  const [previewed] = useState(
+    () => new Set(attachments.filter((a) => deliveredPreview(a.id)).map((a) => a.id)),
+  );
   const openImage = (attachment: AttachmentDTO) =>
     setViewing(images.findIndex((a) => a.id === attachment.id));
 
@@ -382,6 +384,16 @@ export function Attachments({ attachments }: { attachments: AttachmentDTO[] }) {
         if (run.items.length === 1) {
           return (
             <SingleImage key={first!.id} attachment={first!} onOpen={() => openImage(first!)} />
+          );
+        }
+        if (blocked && !run.items.some((a) => previewed.has(a.id))) {
+          return (
+            <FileCard
+              key={first!.id}
+              icon={<ImageOff size={18} aria-hidden />}
+              name={`${run.items.length} images`}
+              line={FILES_BLOCKED}
+            />
           );
         }
         const cells = attachmentGrid(run.items.length);

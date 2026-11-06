@@ -4,15 +4,18 @@ import { ChevronLeft, ChevronRight, Download, ImageOff, X } from 'lucide-react';
 import type { AttachmentDTO } from '@hostile/shared';
 import { mediaUrl } from '../../api/client';
 import { cx, IconButton, Spinner, uiStyles, useDialog } from '../../components/ui';
+import { FILES_BLOCKED, useFilesBlocked } from './files-blocked';
+import { deliveredPreview } from './store';
 import styles from './attachments.module.scss';
 
-function ViewerImage({ image }: { image: AttachmentDTO }) {
+function ViewerImage({ image, blocked }: { image: AttachmentDTO; blocked: boolean }) {
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
-  if (state === 'failed') {
+  const [preview] = useState(() => (blocked ? deliveredPreview(image.id) : null));
+  if (state === 'failed' || (blocked && !preview)) {
     return (
       <div className={styles.viewerFailed}>
         <ImageOff size={22} aria-hidden />
-        This image could not be loaded.
+        {blocked ? FILES_BLOCKED : 'This image could not be loaded.'}
       </div>
     );
   }
@@ -25,7 +28,7 @@ function ViewerImage({ image }: { image: AttachmentDTO }) {
       )}
       <img
         className={cx(styles.viewerImage, state === 'ready' && styles.viewerImageReady)}
-        src={mediaUrl(image.url)}
+        src={preview?.url ?? mediaUrl(image.url)}
         alt={image.fileName}
         draggable={false}
         onLoad={() => setState('ready')}
@@ -49,6 +52,7 @@ export function AttachmentViewer({
   const ref = useRef<HTMLDivElement>(null);
   const image = images[index]!;
   const several = images.length > 1;
+  const blocked = useFilesBlocked();
 
   useDialog(ref, onClose);
 
@@ -109,17 +113,19 @@ export function AttachmentViewer({
             {index + 1} of {images.length}
           </span>
         )}
-        <a
-          className={cx(uiStyles.button, uiStyles.ghost, uiStyles.small, styles.viewerDownload)}
-          href={mediaUrl(image.url)}
-          download={image.fileName}
-        >
-          <Download size={14} aria-hidden /> Download
-        </a>
+        {!blocked && (
+          <a
+            className={cx(uiStyles.button, uiStyles.ghost, uiStyles.small, styles.viewerDownload)}
+            href={mediaUrl(image.url)}
+            download={image.fileName}
+          >
+            <Download size={14} aria-hidden /> Download
+          </a>
+        )}
         <IconButton label="Close" icon={<X size={18} />} tipBelow data-close onClick={onClose} />
       </div>
       <div className={styles.viewerStage}>
-        <ViewerImage key={image.id} image={image} />
+        <ViewerImage key={`${image.id}:${blocked}`} image={image} blocked={blocked} />
         {several && (
           <>
             <span className={cx(styles.viewerNav, styles.viewerPrev)}>

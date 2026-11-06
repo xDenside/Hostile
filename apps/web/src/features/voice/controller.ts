@@ -163,6 +163,15 @@ function mapMicError(err: unknown): VoiceError {
   }
 }
 
+async function microphoneAllowed(): Promise<boolean> {
+  try {
+    const status = await navigator.permissions?.query({ name: 'microphone' as PermissionName });
+    return status?.state === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 function qualityName(q: ConnectionQuality): RemoteState['quality'] {
   switch (q) {
     case lk.ConnectionQuality.Excellent:
@@ -271,61 +280,68 @@ class VoiceController {
 
     const library = loadLiveKit();
     library.catch(() => undefined);
-    let token;
+    const held = await this.askForMicrophone();
+    if (held.refusal !== null) this.micRefusal = { seq, err: held.refusal };
+    let room: Room;
     try {
-      const hosting = platform().desktop?.hosting;
-      for (let tries = 0; hosting && tries < 60; tries++) {
-        const { state } = (await hosting.status()).parts.media;
-        if (state !== 'starting' && state !== 'restarting') break;
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      if (seq !== this.joinSeq) return;
+      let token;
+      try {
+        const hosting = platform().desktop?.hosting;
+        for (let tries = 0; hosting && tries < 60; tries++) {
+          const { state } = (await hosting.status()).parts.media;
+          if (state !== 'starting' && state !== 'restarting') break;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        token = await endpoints.voiceToken(channelId);
+      } catch (err) {
+        if (seq !== this.joinSeq) return;
+        this.resetIdle(mapTokenError(err));
+        return;
       }
-      token = await endpoints.voiceToken(channelId);
-    } catch (err) {
       if (seq !== this.joinSeq) return;
-      this.resetIdle(mapTokenError(err));
-      return;
-    }
-    if (seq !== this.joinSeq) return;
-    try {
-      lk = await library;
-    } catch (err) {
-      if (seq === this.joinSeq) this.resetIdle(voiceError('unavailable', errorMessage(err)));
-      return;
-    }
-    if (seq !== this.joinSeq) return;
-
-    const s = get();
-    const room = new lk.Room({
-      adaptiveStream: true,
-      dynacast: true,
-      webAudioMix: !onIOS(),
-      disconnectOnPageLeave: true,
-      stopLocalTrackOnUnpublish: true,
-      audioCaptureDefaults: {
-        deviceId: s.inputDeviceId,
-        ...captureConstraints(s.processing, s.suppressorFailures),
-      },
-      audioOutput: { deviceId: s.outputDeviceId },
-      publishDefaults: { dtx: true, red: true, stopMicTrackOnMute: false },
-    });
-    this.room = room;
-    this.serverUrl = token.url;
-    this.leaving = false;
-    this.bindRoomEvents(room);
-    set({ status: 'connecting' });
-
-    try {
-      await room.connect(voiceServerUrl(token.url), token.token, { autoSubscribe: true });
-    } catch (err) {
+      try {
+        lk = await library;
+      } catch (err) {
+        if (seq === this.joinSeq) this.resetIdle(voiceError('unavailable', errorMessage(err)));
+        return;
+      }
       if (seq !== this.joinSeq) return;
-      const mapped = mapConnectError(err, token.url);
-      await this.teardown();
-      if (seq === this.joinSeq) this.resetIdle(mapped);
-      return;
-    }
-    if (seq !== this.joinSeq) {
-      void room.disconnect();
-      return;
+      const s = get();
+      room = new lk.Room({
+        adaptiveStream: true,
+        dynacast: true,
+        webAudioMix: !onIOS(),
+        disconnectOnPageLeave: true,
+        stopLocalTrackOnUnpublish: true,
+        audioCaptureDefaults: {
+          deviceId: s.inputDeviceId,
+          ...captureConstraints(s.processing, s.suppressorFailures),
+        },
+        audioOutput: { deviceId: s.outputDeviceId },
+        publishDefaults: { dtx: true, red: true, stopMicTrackOnMute: false },
+      });
+      this.room = room;
+      this.serverUrl = token.url;
+      this.leaving = false;
+      this.bindRoomEvents(room);
+      set({ status: 'connecting' });
+
+      try {
+        await room.connect(voiceServerUrl(token.url), token.token, { autoSubscribe: true });
+      } catch (err) {
+        if (seq !== this.joinSeq) return;
+        const mapped = mapConnectError(err, token.url);
+        await this.teardown();
+        if (seq === this.joinSeq) this.resetIdle(mapped);
+        return;
+      }
+      if (seq !== this.joinSeq) {
+        void room.disconnect();
+        return;
+      }
+    } finally {
+      for (const track of held.stream?.getTracks() ?? []) track.stop();
     }
 
     set({ status: 'connected', audioPlaybackBlocked: !room.canPlaybackAudio });
@@ -393,6 +409,28 @@ class VoiceController {
     return s.micMuted || s.deafened;
   }
 
+  private micRefusal: { seq: number; err: unknown } | null = null;
+
+  private async askForMicrophone(): Promise<{ stream: MediaStream | null; refusal: unknown }> {
+    const skipped = { stream: null, refusal: null };
+    if (platform().kind === 'desktop') return skipped;
+    const media = navigator.mediaDevices;
+    if (typeof media?.getUserMedia !== 'function') return skipped;
+    if (await microphoneAllowed()) return skipped;
+    const deviceId = get().inputDeviceId;
+    try {
+      const stream = await media.getUserMedia({
+        audio: deviceId && deviceId !== 'default' ? { deviceId } : true,
+      });
+      return { stream, refusal: null };
+    } catch (err) {
+      const refused =
+        err instanceof DOMException &&
+        (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      return { stream: null, refusal: refused ? err : null };
+    }
+  }
+
   private micPublishing: { seq: number; done: Promise<void> } | null = null;
 
   private publishMicrophone(seq: number): Promise<void> {
@@ -415,6 +453,13 @@ class VoiceController {
     this.micProcessor = null;
     this.micConstraints = null;
     await stale?.destroy();
+    const refusal = this.micRefusal;
+    this.micRefusal = null;
+    if (refusal?.seq === seq) {
+      if (seq === this.joinSeq && this.room === room)
+        set({ micPublished: false, error: mapMicError(refusal.err) });
+      return;
+    }
     const s = get();
     const constraints = captureConstraints(s.processing, s.suppressorFailures);
     let track: LocalAudioTrack;

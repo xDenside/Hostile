@@ -16,6 +16,7 @@ import {
   UploadCanceled,
 } from '../../api/client';
 import { loadJson, saveJson } from '../../lib/storage';
+import { useTunnel } from '../../tunnel/state';
 import { useCommunity } from '../../stores/community';
 import { useSession } from '../../stores/session';
 import { toast, useUi } from '../../stores/ui';
@@ -925,12 +926,19 @@ function settleLocalFile(file: PendingFile) {
     width: file.width,
     height: file.height,
   });
-  const timer = setTimeout(() => {
-    deliveredTimers.delete(timer);
-    deliveredPreviews.delete(attachmentId);
-    URL.revokeObjectURL(local.previewUrl);
-  }, DELIVERED_PREVIEW_MS);
-  deliveredTimers.add(timer);
+  const expire = () => {
+    const timer = setTimeout(() => {
+      deliveredTimers.delete(timer);
+      if (useTunnel.getState().filesBlocked) {
+        expire();
+        return;
+      }
+      deliveredPreviews.delete(attachmentId);
+      URL.revokeObjectURL(local.previewUrl);
+    }, DELIVERED_PREVIEW_MS);
+    deliveredTimers.add(timer);
+  };
+  expire();
 }
 
 function releaseAllLocalFiles() {

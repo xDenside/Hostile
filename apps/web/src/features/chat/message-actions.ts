@@ -3,6 +3,8 @@ import { mediaUrl } from '../../api/client';
 import { useCommunity } from '../../stores/community';
 import { useSession } from '../../stores/session';
 import { openPopup, selectChannel, toast, useUi } from '../../stores/ui';
+import { useTunnel } from '../../tunnel/state';
+import { FILES_BLOCKED } from './files-blocked';
 import { requestJump, startDelete, startForward } from './store';
 
 const ROW_SELECTOR = '[data-message-id]';
@@ -116,7 +118,13 @@ async function pngOf(file: AttachmentDTO): Promise<Blob> {
   });
 }
 
+const filesBlocked = () => useTunnel.getState().filesBlocked;
+
 export async function copyFile(file: AttachmentDTO) {
+  if (filesBlocked()) {
+    toast(FILES_BLOCKED, 'error');
+    return;
+  }
   if (copiesAsPicture(file)) {
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngOf(file) })]);
@@ -130,10 +138,10 @@ export async function copyFile(file: AttachmentDTO) {
 export const fileCopyLabel = (file: AttachmentDTO) =>
   copiesAsPicture(file) ? 'Copy image' : 'Copy link';
 
-export function messageCopyLabel(message: MessageDTO): string | null {
+export function messageCopyLabel(message: MessageDTO, blocked: boolean): string | null {
   if (message.content) return 'Copy text';
   const [first, ...rest] = message.attachments;
-  if (!first) return null;
+  if (!first || blocked) return null;
   return rest.length > 0 ? 'Copy links' : fileCopyLabel(first);
 }
 
@@ -141,6 +149,10 @@ export async function copyMessage(message: MessageDTO) {
   if (message.content) return copyToClipboard(message.content, 'Text copied.');
   const [first, ...rest] = message.attachments;
   if (!first) return;
+  if (filesBlocked()) {
+    toast(FILES_BLOCKED, 'error');
+    return;
+  }
   if (rest.length === 0) return copyFile(first);
   return copyToClipboard(message.attachments.map(fileLink).join('\n'), 'Links copied.');
 }

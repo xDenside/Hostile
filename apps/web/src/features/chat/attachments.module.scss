@@ -434,6 +434,11 @@
   color: var(--text-muted);
 }
 
+.viewerFailed {
+  padding-inline: calc(var(--sp-8) + var(--sp-4));
+  text-align: center;
+}
+
 .viewerNav {
   position: absolute;
   top: 50%;

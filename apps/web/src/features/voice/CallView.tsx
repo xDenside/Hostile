@@ -9,6 +9,7 @@ import { NO_PARTICIPANTS, useCommunity } from '../../stores/community';
 import { useSession } from '../../stores/session';
 import { openPopup, useUi } from '../../stores/ui';
 import { ChannelView } from '../chat/ChannelView';
+import { useFilesBlocked } from '../chat/files-blocked';
 import { NameText } from '../profile/NameText';
 import { memberTrigger } from '../profile/triggers';
 import {
@@ -402,9 +403,10 @@ function TileMeta({ userId, mic, deafened, quality, isSelf }: TileProps) {
 function TileBackdrop({ user }: { user: UserPublic | undefined }) {
   const reduced = useReducedMotion();
   const url = user?.bannerUrl ? mediaUrl(user.bannerUrl) : null;
+  const filesBlocked = useFilesBlocked();
   const [still, setStill] = useState<{ url: string; frame: string | null } | null>(null);
   useEffect(() => {
-    if (!url || !reduced) return;
+    if (!url || !reduced || filesBlocked) return;
     let alive = true;
     void stillFrame(url).then((frame) => {
       if (alive) setStill({ url, frame });
@@ -412,7 +414,7 @@ function TileBackdrop({ user }: { user: UserPublic | undefined }) {
     return () => {
       alive = false;
     };
-  }, [url, reduced]);
+  }, [url, reduced, filesBlocked]);
   const src = reduced ? (still?.url === url ? still?.frame : null) : url;
   const color = user?.bannerColor ?? user?.avatarColor ?? '#2e2e2e';
   return (
@@ -423,7 +425,15 @@ function TileBackdrop({ user }: { user: UserPublic | undefined }) {
       }}
       aria-hidden
     >
-      {src && <img src={src} alt="" draggable={false} data-testid="tile-backdrop-image" />}
+      {src && (
+        <img
+          key={String(filesBlocked)}
+          src={src}
+          alt=""
+          draggable={false}
+          data-testid="tile-backdrop-image"
+        />
+      )}
     </span>
   );
 }

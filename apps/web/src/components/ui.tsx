@@ -14,6 +14,7 @@ import {
 import { ChevronDown, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { mediaUrl } from '../api/client';
+import { useFilesBlocked } from '../features/chat/files-blocked';
 import { stillFrame } from '../lib/still-frame';
 import { dismissToast, useUi } from '../stores/ui';
 import styles from './ui.module.scss';
@@ -140,10 +141,12 @@ export function Avatar({
 }) {
   const text = initials(name) || '?';
   const url = src ? mediaUrl(src) : null;
+  const filesBlocked = useFilesBlocked();
+  const failKey = url && `${filesBlocked}:${url}`;
   const [failed, setFailed] = useState<string | null>(null);
   const [still, setStill] = useState<{ url: string; frame: string | null } | null>(null);
   useEffect(() => {
-    if (!url || animate) return;
+    if (!url || animate || filesBlocked) return;
     let alive = true;
     void stillFrame(url).then((frame) => {
       if (alive) setStill({ url, frame });
@@ -151,8 +154,8 @@ export function Avatar({
     return () => {
       alive = false;
     };
-  }, [url, animate]);
-  const showImage = !!url && failed !== url;
+  }, [url, animate, filesBlocked]);
+  const showImage = !!url && failed !== failKey;
   const frame = !animate && still?.url === url ? still.frame : null;
   const dot = Math.min(16, Math.max(10, Math.round(size * 0.26)));
   const dotInset = (size / 2) * (1 - Math.SQRT1_2) - dot / 2;
@@ -173,11 +176,12 @@ export function Avatar({
         <>
           {frame && <img className={styles.avatarImage} src={frame} alt="" draggable={false} />}
           <img
+            key={String(filesBlocked)}
             className={cx(styles.avatarImage, frame && styles.avatarLive)}
             src={url}
             alt=""
             draggable={false}
-            onError={() => setFailed(url)}
+            onError={() => setFailed(failKey)}
           />
         </>
       ) : (

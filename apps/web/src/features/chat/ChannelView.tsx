@@ -72,6 +72,7 @@ import {
 import { ForwardLabel, OriginLine, QuoteLine } from './Quote';
 import styles from './chat.module.scss';
 import mediaStyles from './attachments.module.scss';
+import { useFilesBlocked } from './files-blocked';
 import {
   addToTray,
   cancelReply,
@@ -557,9 +558,10 @@ function RowActions({ channelId, row }: { channelId: string; row: HTMLElement })
   const editing = useChat((s) => s.editing[channelId] === messageId);
   const selfId = useSession((s) => s.user?.id);
   const isOwner = useSession((s) => s.user?.role === 'owner');
+  const filesBlocked = useFilesBlocked();
   if (!message || editing) return null;
   const isOwn = message.authorId === selfId;
-  const copyLabel = messageCopyLabel(message);
+  const copyLabel = messageCopyLabel(message, filesBlocked);
   return createPortal(
     <div className={styles.actions} data-row-actions>
       <IconButton label="Reply" icon={<Reply size={15} />} onClick={() => startReply(message)} />

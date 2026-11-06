@@ -353,6 +353,10 @@ What a person sees when strong does not run:
   depends on the browser and on what you pick (a tab, a window, a whole screen).
 - **Audio playback may be blocked** until you interact with the page (browser autoplay policy). The
   app shows an "Enable audio" button rather than failing silently.
+- **A guest who refuses the microphone can usually still listen.** The app asks for the microphone
+  before a call connects, because a browser without that permission offers the call only a made-up
+  `.local` name instead of its real address. On a network where those names do not resolve, a guest
+  who refuses cannot join voice at all through a host on the same machine or network.
 - **Media tokens cannot be revoked** in LiveKit 1.13; see [SECURITY.md](SECURITY.md#media-authorization)
   for the exact residual window and the mitigation.
 - **Two windows of the same person** cannot both be in the same voice room. The newest window wins

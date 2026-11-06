@@ -38,6 +38,7 @@ import {
   type MessagePopup,
   type Popup,
 } from '../../stores/ui';
+import { useFilesBlocked } from '../chat/files-blocked';
 import {
   confirmDelete,
   copyFile,
@@ -384,20 +385,22 @@ function MessageMenu({ popup }: { popup: MessagePopup }) {
   );
   const selfId = useSession((s) => s.user?.id);
   const role = useSession((s) => s.user?.role);
+  const filesBlocked = useFilesBlocked();
   const gone = !message;
   useEffect(() => {
     if (gone) closePopup();
   }, [gone]);
   if (!message) return null;
 
-  const file =
-    message.attachments.find((a) => a.id === popup.attachmentId) ??
-    (!message.content && message.attachments.length === 1 ? message.attachments[0] : undefined);
+  const file = filesBlocked
+    ? undefined
+    : (message.attachments.find((a) => a.id === popup.attachmentId) ??
+      (!message.content && message.attachments.length === 1 ? message.attachments[0] : undefined));
   const isOwn = message.authorId === selfId;
   const canEdit = isOwn && !message.forwardedFrom;
   const canDelete = isOwn || role === 'owner';
   const copyable = popup.selection || message.content;
-  const copyAll = !copyable && !file ? messageCopyLabel(message) : null;
+  const copyAll = !copyable && !file ? messageCopyLabel(message, filesBlocked) : null;
 
   return (
     <div
@@ -608,6 +611,7 @@ export function ProfileBanner({
   user: Pick<UserPublic, 'bannerUrl' | 'bannerColor' | 'avatarColor'> | undefined;
 }) {
   const color = user?.bannerColor ?? user?.avatarColor ?? '#2e2e2e';
+  const filesBlocked = useFilesBlocked();
   return (
     <div
       className={styles.banner}
@@ -616,7 +620,13 @@ export function ProfileBanner({
       }}
     >
       {user?.bannerUrl && (
-        <img src={mediaUrl(user.bannerUrl)} alt="" draggable={false} className={styles.bannerImg} />
+        <img
+          key={String(filesBlocked)}
+          src={mediaUrl(user.bannerUrl)}
+          alt=""
+          draggable={false}
+          className={styles.bannerImg}
+        />
       )}
     </div>
   );

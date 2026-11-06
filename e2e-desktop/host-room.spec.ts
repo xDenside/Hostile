@@ -70,7 +70,7 @@ test.describe.serial('a room hosted in the real app, with a tab guest and an app
     appGuest = await launch(guestDir);
     const context = await browser.newContext();
     await context
-      .grantPermissions(['clipboard-read'], { origin: GUEST_URL })
+      .grantPermissions(['clipboard-read', 'microphone'], { origin: GUEST_URL })
       .catch(() => undefined);
     tab = await context.newPage();
     tab.on('console', (message) => tabLogs.push(`tab console: ${message.text()}`));

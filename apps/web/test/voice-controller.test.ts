@@ -32,10 +32,12 @@ const hoisted = vi.hoisted(() => {
   const state = {
     rooms: [] as InstanceType<typeof FakeRoom>[],
     captures: [] as Promise<unknown>[],
+    tokens: 0,
     publishes: new Map<number, Promise<void>>(),
     deviceListeners: [] as unknown[],
     attach: vi.fn(),
     made: [] as unknown[],
+    platformKind: 'web' as 'web' | 'desktop',
   };
   class FakeRoom {
     index = state.rooms.length;
@@ -97,7 +99,13 @@ vi.mock('livekit-client', () => {
     ConnectionErrorReason: names(),
     DisconnectReason: names(),
     ConnectionError: class extends Error {},
-    MediaDeviceFailure: { getFailure: () => undefined },
+    MediaDeviceFailure: {
+      PermissionDenied: 'PermissionDenied',
+      getFailure: (err: unknown) =>
+        err instanceof DOMException && err.name === 'NotAllowedError'
+          ? 'PermissionDenied'
+          : undefined,
+    },
     Track: {
       Source: {
         Microphone: 'microphone',
@@ -115,9 +123,14 @@ vi.mock('../src/api/client', () => ({
   ApiError: class extends Error {},
   errorMessage: (err: Error) => err.message,
   mediaUrl: (path: string) => path,
-  endpoints: { voiceToken: async () => ({ url: 'ws://voice.test', token: 'token' }) },
+  endpoints: {
+    voiceToken: async () => {
+      hoisted.state.tokens += 1;
+      return { url: 'ws://voice.test', token: 'token' };
+    },
+  },
 }));
-vi.mock('../src/platform', () => ({ platform: () => ({ kind: 'web' }) }));
+vi.mock('../src/platform', () => ({ platform: () => ({ kind: hoisted.state.platformKind }) }));
 vi.mock('../src/realtime/socket', () => ({
   emitVoiceSelfState: vi.fn(),
   onRealtimeConnect: () => () => undefined,
@@ -152,7 +165,10 @@ function fakeElement() {
   };
 }
 
-const mediaDevices = {
+const mediaDevices: {
+  getUserMedia?: ReturnType<typeof vi.fn>;
+  [key: string]: unknown;
+} = {
   addEventListener(type: string, listener: unknown) {
     if (type === 'devicechange') hoisted.state.deviceListeners.push(listener);
   },
@@ -165,7 +181,12 @@ const mediaDevices = {
 };
 
 vi.stubGlobal('document', { createElement: fakeElement, body: { appendChild: () => undefined } });
-vi.stubGlobal('navigator', { mediaDevices, userAgent: 'test' });
+const fakeNavigator: {
+  mediaDevices: typeof mediaDevices;
+  userAgent: string;
+  permissions?: unknown;
+} = { mediaDevices, userAgent: 'test' };
+vi.stubGlobal('navigator', fakeNavigator);
 
 beforeEach(async () => {
   await voice().leave();
@@ -173,11 +194,15 @@ beforeEach(async () => {
   hoisted.state.captures.length = 0;
   hoisted.state.publishes.clear();
   hoisted.state.attach.mockReset();
+  hoisted.state.platformKind = 'web';
+  delete mediaDevices.getUserMedia;
+  delete fakeNavigator.permissions;
   useVoice.setState({
     processing: defaultAudioProcessing,
     suppressorFailures: {},
     micPublished: false,
     error: null,
+    inputDeviceId: 'default',
   });
 });
 
@@ -347,6 +372,124 @@ describe('leaving a call', () => {
     expect(hoisted.state.deviceListeners).toHaveLength(before + 1);
     await voice().leave();
     expect(hoisted.state.deviceListeners).toHaveLength(before);
+  });
+});
+
+describe('asking for the microphone before the call connects', () => {
+  const fakeStream = () => {
+    const stoppedWithRooms: number[] = [];
+    const tracks = [0, 1].map(() => ({ stop: vi.fn(() => stoppedWithRooms.push(rooms.length)) }));
+    return { tracks, stoppedWithRooms, getTracks: () => tracks };
+  };
+  const permission = (state: string) => ({ query: vi.fn(async () => ({ state })) });
+
+  it('asks before the token and the call, and holds the microphone until the call connects', async () => {
+    useVoice.setState({ inputDeviceId: 'usb-mic' });
+    fakeNavigator.permissions = permission('prompt');
+    const stream = fakeStream();
+    let roomsWhenAsked = -1;
+    let tokensWhenAsked = -1;
+    hoisted.state.tokens = 0;
+    mediaDevices.getUserMedia = vi.fn(async () => {
+      roomsWhenAsked = rooms.length;
+      tokensWhenAsked = hoisted.state.tokens;
+      return stream;
+    });
+
+    await voice().join('channel-a');
+
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: 'usb-mic' } });
+    expect(roomsWhenAsked).toBe(0);
+    expect(tokensWhenAsked).toBe(0);
+    expect(hoisted.state.tokens).toBe(1);
+    for (const track of stream.tracks) expect(track.stop).toHaveBeenCalledTimes(1);
+    expect(stream.stoppedWithRooms).toEqual([1, 1]);
+    expect(useVoice.getState().status).toBe('connected');
+    expect(useVoice.getState().micPublished).toBe(true);
+  });
+
+  it('asks for any microphone when the permission cannot be read', async () => {
+    fakeNavigator.permissions = {
+      query: vi.fn(async () => {
+        throw new TypeError('microphone is not a valid permission name');
+      }),
+    };
+    mediaDevices.getUserMedia = vi.fn(async () => fakeStream());
+
+    await voice().join('channel-a');
+
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(useVoice.getState().status).toBe('connected');
+  });
+
+  it('does not ask when the microphone is already allowed', async () => {
+    fakeNavigator.permissions = permission('granted');
+    mediaDevices.getUserMedia = vi.fn(async () => fakeStream());
+
+    await voice().join('channel-a');
+
+    expect(mediaDevices.getUserMedia).not.toHaveBeenCalled();
+    expect(useVoice.getState().status).toBe('connected');
+  });
+
+  it('does not ask in the desktop app', async () => {
+    hoisted.state.platformKind = 'desktop';
+    fakeNavigator.permissions = permission('prompt');
+    mediaDevices.getUserMedia = vi.fn(async () => fakeStream());
+
+    await voice().join('channel-a');
+
+    expect(mediaDevices.getUserMedia).not.toHaveBeenCalled();
+    expect(useVoice.getState().status).toBe('connected');
+  });
+
+  it('still joins after a refusal, asks only once, and shows one listen-only message', async () => {
+    useUi.setState({ toasts: [] });
+    fakeNavigator.permissions = permission('prompt');
+    mediaDevices.getUserMedia = vi.fn(async () => {
+      throw new DOMException('Permission denied', 'NotAllowedError');
+    });
+
+    await voice().join('channel-a');
+
+    expect(rooms).toHaveLength(1);
+    expect(useVoice.getState().status).toBe('connected');
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(rooms[0]!.localParticipant.publishTrack).not.toHaveBeenCalled();
+    expect(useVoice.getState().micPublished).toBe(false);
+    expect(useVoice.getState().error?.message).toContain('You can still listen.');
+    expect(useUi.getState().toasts).toEqual([]);
+  });
+
+  it('opens the microphone normally when the question failed for another reason', async () => {
+    fakeNavigator.permissions = permission('prompt');
+    mediaDevices.getUserMedia = vi.fn(async () => {
+      throw new DOMException('Could not start audio source', 'NotReadableError');
+    });
+
+    await voice().join('channel-a');
+
+    expect(useVoice.getState().status).toBe('connected');
+    expect(rooms[0]!.localParticipant.publishTrack).toHaveBeenCalledTimes(1);
+    expect(useVoice.getState().micPublished).toBe(true);
+  });
+
+  it('lets a leave during the question win, and still lets the microphone go', async () => {
+    fakeNavigator.permissions = permission('prompt');
+    const answer = deferred<ReturnType<typeof fakeStream>>();
+    mediaDevices.getUserMedia = vi.fn(() => answer.promise);
+
+    const joined = voice().join('channel-a');
+    await settle();
+    expect(useVoice.getState().status).toBe('requesting-token');
+    await voice().leave();
+    const stream = fakeStream();
+    answer.resolve(stream);
+    await joined;
+
+    expect(rooms).toHaveLength(0);
+    expect(useVoice.getState().status).toBe('idle');
+    for (const track of stream.tracks) expect(track.stop).toHaveBeenCalled();
   });
 });
 

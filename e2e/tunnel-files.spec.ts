@@ -96,4 +96,50 @@ test.describe('files through the tunnel', () => {
     await aliceContext.close();
     await bobContext.close();
   });
+
+  test('a guest whose browser refuses the file worker still joins, and is told why images do not show', async ({
+    browser,
+  }) => {
+    const aliceContext = await browser.newContext();
+    const bobContext = await browser.newContext({ serviceWorkers: 'block' });
+    const alice = await aliceContext.newPage();
+    const bob = await bobContext.newPage();
+    const webrtc = await alice.evaluate(() => typeof RTCPeerConnection);
+    test.skip(webrtc !== 'function', 'this browser build has no WebRTC, so it cannot join at all');
+
+    await joinAndSignIn(alice, host.code, USERS.alice);
+    await joinAndSignIn(bob, host.code, USERS.bob);
+    for (const page of [alice, bob]) {
+      const list = page.getByRole('button', { name: 'Open channel list' });
+      if (await list.isVisible()) await list.click();
+      await openTextChannel(page, 'general');
+    }
+    expect(await bob.evaluate(() => !!navigator.serviceWorker?.controller)).toBe(false);
+
+    await alice
+      .locator('input[type=file]')
+      .first()
+      .setInputFiles([pngFile('first.png', 320, 200, 3), pngFile('second.png', 320, 200, 4)]);
+    const composer = alice.getByLabel('Message #general');
+    await composer.click();
+    await composer.press('Enter');
+
+    const card = bob.getByRole('log').getByTestId('attachment-card').last();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await expect(card).toContainText('2 images');
+    await expect(card).toContainText('cannot be shown in this tab');
+
+    await card.click({ button: 'right' });
+    const items = bob.getByTestId('message-menu').getByRole('menuitem');
+    await expect(items.first()).toBeVisible();
+    const names = await items.allTextContents();
+    for (const hidden of ['Save image', 'Copy image', 'Copy link', 'Copy links']) {
+      expect(names).not.toContain(hidden);
+    }
+    expect(names).toContain('Reply');
+    await bob.keyboard.press('Escape');
+
+    await aliceContext.close();
+    await bobContext.close();
+  });
 });
