@@ -240,6 +240,16 @@ own `fetch` in the page and a CDP session's upload limit would see nothing. `e2e
 on the frames of the tunnel, under the tests only. With no route on the page a frame goes at once and the test process is
 only told, because asking it first costs time that a reload right after can win.
 
+`tunnel-protections.spec.ts` also listens on the local rendezvous as someone holding the code would, and opens everything
+with the key from the code. What a guest sent must be a knock or a sealed envelope, with no SDP or candidate in reach, while
+the host's half is readable. Another test starts a host on the real code with another signing key and no real host: a guest
+on its first visit fails at finding the host, puts nothing but knocks on the relay, and that host's server sees no request.
+When the real host starts, the same guest connects. A third starts a second host with the real host's own signing key, as
+a copied `host/secrets.json` would, but its own certificate. The guest believes it and reaches it, so only the certificate
+the guest remembers keeps its cookie and requests from that host. `apps/web/test/tunnel-rendezvous.test.ts` covers the
+seals themselves, and it and `apps/desktop/src/host-config.test.ts` check one fixed code, so the desktop's hash and the
+page's agree.
+
 The host's window holds a microphone permission in these tests, because a page without one offers only its default-route
 address, and on a machine where that address does not reach itself a guest with no permissions could never connect. Most
 tests grant the guest a microphone too, so `tunnel-chat.spec.ts` has one guest who has granted nothing.

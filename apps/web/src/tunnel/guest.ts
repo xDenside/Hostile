@@ -16,8 +16,9 @@ import { installLivekitShims, setTunnelNet } from './net';
 import {
   APP_ID,
   ChannelWriter,
+  guestSealFor,
+  KNOCK,
   openChannels,
-  relaySealFor,
   remoteFingerprint,
   rootTopicOf,
   roomParams,
@@ -266,7 +267,7 @@ function stopKnocking() {
 
 async function knock(topic: string) {
   const { createEvent, getRelaySockets } = await import('trystero/nostr');
-  const event = await createEvent(topic, JSON.stringify({ peerId: '!' }));
+  const event = await createEvent(topic, KNOCK);
   for (const socket of Object.values(getRelaySockets() as Record<string, WebSocket>)) {
     if (socket.readyState === WebSocket.OPEN) socket.send(event);
   }
@@ -329,7 +330,7 @@ async function connect(mine: number): Promise<boolean> {
     installLivekitShims();
 
     const { joinRoom, getRelaySockets, setRelaySeal } = await import('trystero/nostr');
-    const seal = await relaySealFor(secret);
+    const seal = await guestSealFor(secret);
     if (mine !== attempt) return false;
     if (room) {
       const leaving = room;

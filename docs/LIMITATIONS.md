@@ -14,10 +14,9 @@ host-on-your-PC design has not built or proved yet.
   rollover everyone asks again as someone new.
 - **A copied device identity is that person** until the host removes them. For a guest it sits in `localStorage`, in the
   app as well as in a tab, and script in that page can read it.
-- **Anyone holding the code can read connection details on the relays**, including home addresses, for as long as the code
-  lives.
-- **A fake host on a first visit** gets no password any more, because there is none, but it still gets what you send it:
-  your nickname and pictures.
+- **Anyone holding the code learns the host's address** from the relays, for as long as the code lives, and sees when
+  someone joins. A guest's own connection details are sealed for the host alone, and a host someone stands up on the code
+  without the host's signing key gets nothing from a guest, on a first visit too.
 - **Waiting places can be filled.** Guests without a session have ten seats, three minutes each, and whoever has waited
   longest makes room for a new one. People waiting for the host take a new seat by themselves. Twenty requests can wait
   at once, one per connection, and someone reconnecting with the code can hold those places until each lapses, 90 seconds
@@ -38,6 +37,8 @@ host-on-your-PC design has not built or proved yet.
 
 - **Closing a laptop's lid ends the room** until it opens. The app can stop a PC sleeping by itself, not this.
 - **A new code cuts off everyone connected.** They need the new code from the host. A code that has leaked has no other answer.
+- **The code changes once on upgrade.** The code now names the host's signing key, so a host from before that gets a new
+  code on its first start after the upgrade, and has to give it to everyone again.
 - **One PC at a time.** Moving a room to another PC is not built.
 - **Proven on one Mac.** Both ends of every test were on the same machine, with one exception for the relays. The
   Apple Silicon package was run for real there (docs/DESKTOP.md, "The packaged app, checked"); real home routers,
@@ -364,14 +365,16 @@ What a person sees when strong does not run:
 
 ## What the tunnel leaves open
 
-[DESIGN.md](DESIGN.md) gives the reasons. Each of these needs someone holding the code, except the last two.
+[DESIGN.md](DESIGN.md) gives the reasons. The first two need someone holding the code.
 
-- **A first visit trusts whichever host answers.** A browser remembers the first host it reaches and no other is told
-  anything after that, but before that a fake host with the code gets the nickname and pictures on the join card.
-- **A host's key lasts a year**, the longest browsers allow, and a new one looks to guests like someone else. They are
-  told, and paste the code again.
-- **Everything on the relay is readable with the code**, including who connects and from where.
-- **Relay operators see addresses.** Anyone running a relay in use sees the host's and every guest's IP address.
+- **The host's half of the signalling is readable with the code**, including the host's address, and so is the fact that
+  someone is joining and when. A guest's half is sealed for the host, so the code does not give away a guest's address.
+- **Someone holding the code can slow a join down**, by knocking, or by replaying the host's older messages, which can
+  point a guest at a key the host no longer holds until the host speaks again. Neither shows them anything.
+- **A host's certificate lasts a year**, the longest browsers allow, and a new one looks to guests like someone else. They
+  are told, and paste the code again.
+- **Relay operators see addresses.** Anyone running a relay in use sees the host's and every guest's IP address, and so
+  does any STUN server a page asks.
 - **No policy on the guest pages.** The guest and bridge pages carry no `Content-Security-Policy`, and the server's
   policy only covers a site it serves itself. A meta tag would cover them, once it can be tested against a built
   guest site, including WebAssembly and worklets for voice.

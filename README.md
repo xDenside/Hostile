@@ -105,8 +105,9 @@ That is the whole sign-up. There are no accounts, passwords or emails anywhere.
 
 ## Under the hood
 
-Every guest connects to the host and to nobody else. Public Nostr relays help a guest find the host, with everything
-on the relay sealed by a key taken from the code. After that, the app's requests, live updates and call signalling
+Every guest connects to the host and to nobody else. Public Nostr relays help a guest find the host. The code names the
+host's own signing key, so a guest believes only that host, and seals what it puts on the relay so only that host can
+read it. After that, the app's requests, live updates and call signalling
 travel through a tunnel over WebRTC data channels, and voice and screen shares go straight to a LiveKit media server
 running on the host's PC. If a connection fails, the join screen says which step failed.
 
@@ -150,8 +151,8 @@ Hostile is an early preview, version 0.1.0. The app is built and tested, but the
 - **Some networks cannot connect directly.** Published estimates put this at 8-25% of sessions. The project runs no
   relay; the join screen takes a TURN relay of your own, which has not been tested yet.
 - **Built for friends, not strangers.** Connections are encrypted in transit, but not end to end: the host's PC can
-  read every message and could record calls. Every guest learns the host's IP address, and anyone holding the code, like
-  any relay operator, can see every guest's.
+  read every message and could record calls. Every guest, and anyone holding the code, learns the host's IP address.
+  Someone with the code cannot read a guest's on the relays, but any relay operator can see every guest's.
 - **A person is their device.** A new device or cleared browser data is a new person, who asks to join again. There
   is no account to recover, link or export.
 

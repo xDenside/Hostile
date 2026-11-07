@@ -140,11 +140,17 @@ test('first run hosts a room: code shown, only the media port off loopback, no s
       secrets.livekitKey,
       secrets.roomCode,
       secrets.ownerSecret,
+      secrets.identityPrivateKey,
     ]) {
       expect(everyLog.includes(String(secret)), 'a secret reached a log').toBe(false);
     }
     const commandLines = execFileSync('ps', ['-axww', '-o', 'command='], { encoding: 'utf8' });
-    for (const secret of [secrets.sessionSecret, secrets.livekitSecret, secrets.ownerSecret]) {
+    for (const secret of [
+      secrets.sessionSecret,
+      secrets.livekitSecret,
+      secrets.ownerSecret,
+      secrets.identityPrivateKey,
+    ]) {
       expect(commandLines.includes(String(secret)), 'a secret on a command line').toBe(false);
     }
 

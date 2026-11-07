@@ -329,11 +329,17 @@ export function createHostService(
 
   const openBridge = () => {
     set('bridge', { state: 'starting' });
+    const current = secrets!.get();
     bridge = openBridgeWindow(
       {
-        code: secrets!.get().roomCode,
+        code: current.roomCode,
         gatewayUrl: `ws://127.0.0.1:${ports!.gateway}`,
         gatewaySecret,
+        identity: {
+          privateKey: current.identityPrivateKey,
+          publicKey: current.identityPublicKey,
+          salt: current.codeSalt,
+        },
       },
       (report) => {
         if (report.room === 'open') set('bridge', { state: 'running' });

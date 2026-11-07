@@ -1,11 +1,17 @@
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, expect, type Browser, type Page } from '@playwright/test';
-import { formatRoomCode } from '../packages/shared/src/tunnel';
+import {
+  formatRoomCode,
+  ROOM_CODE_BYTES,
+  ROOM_CODE_SALT_BYTES,
+  roomCodeInput,
+  type BridgeIdentity,
+} from '../packages/shared/src/tunnel';
 import { startTunnelGateway, type TunnelGateway } from '../apps/server/src/tunnel/gateway';
 import { REPO_ROOT, randomSecret } from '../scripts/lib/env.mjs';
 import { waitForHttp } from '../scripts/lib/net.mjs';
@@ -16,7 +22,33 @@ export const API_URL = `http://127.0.0.1:${process.env.E2E_API_PORT ?? 4290}`;
 export const LIVEKIT_URL = `http://127.0.0.1:${process.env.E2E_LIVEKIT_PORT ?? 17990}`;
 export const ROOM_ORIGIN = `http://localhost:${process.env.E2E_WEB_PORT ?? 5290}`;
 
-export const newCode = () => formatRoomCode(randomBytes(16));
+export interface TunnelRoom {
+  code: string;
+  identity: BridgeIdentity;
+}
+
+export function newRoom(): TunnelRoom {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const { x, y } = publicKey.export({ format: 'jwk' });
+  const raw = Buffer.concat([
+    Buffer.from([4]),
+    Buffer.from(x!, 'base64url'),
+    Buffer.from(y!, 'base64url'),
+  ]);
+  const salt = randomBytes(ROOM_CODE_SALT_BYTES);
+  const hash = createHash('sha256').update(roomCodeInput(raw, salt)).digest();
+  return {
+    code: formatRoomCode(hash.subarray(0, ROOM_CODE_BYTES)),
+    identity: {
+      privateKey: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64url'),
+      publicKey: raw.toString('base64url'),
+      salt: salt.toString('base64url'),
+    },
+  };
+}
+
+export const bridgeFragment = (room: TunnelRoom, gatewayUrl: string, gatewaySecret: string) =>
+  btoa(JSON.stringify({ code: room.code, identity: room.identity, gatewayUrl, gatewaySecret }));
 
 const HOST_ARGS = [
   '--disable-features=WebRtcHideLocalIpsWithMdns',
@@ -25,6 +57,7 @@ const HOST_ARGS = [
 
 export interface TunnelHost {
   code: string;
+  room: TunnelRoom;
   gateway: TunnelGateway;
   page: Page;
   browser: Browser;
@@ -35,7 +68,7 @@ export interface TunnelHost {
 
 export async function startTunnelHost(
   options: {
-    code?: string;
+    room?: TunnelRoom;
     roomUrl?: string;
     livekitUrl?: string | null;
     guestUrl?: string;
@@ -44,7 +77,7 @@ export async function startTunnelHost(
     maxAnonymousGuests?: number;
   } = {},
 ): Promise<TunnelHost> {
-  const code = options.code ?? newCode();
+  const room = options.room ?? newRoom();
   const secret = randomSecret(32);
   const gateway = await startTunnelGateway({
     roomUrl: options.roomUrl ?? API_URL,
@@ -62,13 +95,14 @@ export async function startTunnelHost(
   const browser = await chromium.launch({ channel: 'chromium', args: HOST_ARGS });
   const context = await browser.newContext({ permissions: ['microphone'] });
   const host: TunnelHost = {
-    code,
+    code: room.code,
+    room,
     gateway,
     browser,
     page: null as unknown as Page,
     async openBridge() {
       host.page = await context.newPage();
-      const config = btoa(JSON.stringify({ code, gatewayUrl: gateway.url, gatewaySecret: secret }));
+      const config = bridgeFragment(room, gateway.url, secret);
       await host.page.goto(`${options.guestUrl ?? GUEST_URL}/bridge.html#${config}`);
       await expect(host.page.locator('#status')).toHaveAttribute('data-room', 'open', {
         timeout: 30_000,

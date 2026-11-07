@@ -5,23 +5,36 @@ import {
   parseRoomCode,
   TUNNEL_MAX_FRAME,
   TUNNEL_MAX_QUEUED,
+  type BridgeIdentity,
 } from '@hostile/shared';
-import { joinRoom, setRelaySeal, type Room } from 'trystero/nostr';
+import {
+  createEvent,
+  getRelaySockets,
+  joinRoom,
+  selfId,
+  setRelaySeal,
+  type Room,
+} from 'trystero/nostr';
 import { hostCertificate } from './host-certificate';
 import {
   APP_ID,
   ChannelWriter,
+  hostSealFor,
+  KNOCK,
   openChannels,
-  relaySealFor,
+  rootTopicOf,
   roomParams,
   SAME_MACHINE_ONLY,
   testNetwork,
 } from './rendezvous';
 
+const KNOCK_ANSWER_MS = 1_000;
+
 export interface BridgeConfig {
   code: string;
   gatewayUrl: string;
   gatewaySecret: string;
+  identity: BridgeIdentity;
 }
 
 export interface BridgeStatus {
@@ -37,7 +50,24 @@ export async function startBridge(config: BridgeConfig, onStatus: (s: BridgeStat
   const guests = new Map<string, () => void>();
   const report = (state: BridgeStatus['room']) => onStatus({ room: state, guests: guests.size });
   report('joining');
-  setRelaySeal(await relaySealFor(secret));
+  const dh = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, [
+    'deriveBits',
+  ]);
+  const seal = await hostSealFor(secret, config.identity, dh);
+  const topic = await rootTopicOf(roomId);
+  let answered = 0;
+  setRelaySeal({
+    seal: seal.seal,
+    async open(sealed) {
+      const text = await seal.open(sealed);
+      if (text !== KNOCK) return text;
+      if (Date.now() - answered >= KNOCK_ANSWER_MS) {
+        answered = Date.now();
+        announce(topic).catch(() => undefined);
+      }
+      return null;
+    },
+  });
   const certificates = [await hostCertificate()];
 
   const room: Room = joinRoom(
@@ -78,6 +108,12 @@ export async function startBridge(config: BridgeConfig, onStatus: (s: BridgeStat
       await room.leave();
     },
   };
+}
+
+async function announce(topic: string) {
+  const event = await createEvent(topic, JSON.stringify({ peerId: selfId }));
+  for (const socket of Object.values(getRelaySockets() as Record<string, WebSocket>))
+    if (socket.readyState === WebSocket.OPEN) socket.send(event);
 }
 
 function attachGuest(pc: RTCPeerConnection, config: BridgeConfig, onEnded: () => void) {

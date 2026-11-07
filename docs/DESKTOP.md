@@ -294,10 +294,12 @@ While a guest is connected, WebRTC holds a UDP socket per network on a random po
 connection and only while it lasts. They answer only to the peer they were negotiated with. They are not a service.
 
 **Secrets** live in `host/secrets.json` under the app's user data folder, mode 0600 in a 0700 folder: the session and
-token secrets, LiveKit's key and secret, the owner's secret, the room code, about 128 bits from a real random source. They
-reach the server by message and LiveKit by a 0600 file. They are never on a command line, and the first-run spec searches
-the logs and command lines for them. The server compares the owner's secret by digest, on loopback, and it never reaches a
-renderer.
+token secrets, LiveKit's key and secret, the owner's secret, the host's signing key, and the room code, 128 bits of a hash
+of that key's public half and 32 random bytes. Make a new code changes only the random bytes. A file from before the
+signing key keeps its other secrets and gains a key and a new code on first start. They reach the server by message,
+LiveKit by a 0600 file and the bridge window in the fragment of its address. They are never on a command line, and the
+first-run spec searches the logs and command lines for them. The server compares the owner's secret by digest, on
+loopback, and it never reaches a renderer.
 
 ### What it costs in memory
 

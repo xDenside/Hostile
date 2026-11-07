@@ -137,3 +137,8 @@ Make a new code. Anyone with the old one can then reach nothing.
 
 A guest's session cookie and room code live in `localStorage`, readable by script in the page, and one code serves the
 whole room. See "A person is their device" and "The tunnel" in [DESIGN.md](DESIGN.md) for what that gives up and what the gateway enforces.
+
+The code names the host's signing key, which lives in `host/secrets.json` beside the other secrets and reaches only the
+bridge window, in the part of its address after `#`, which the page removes at once. A guest believes only messages on the
+relay signed with that key, and seals its own for that host alone, so someone holding the code learns the host's address
+but not a guest's. "Finding the host" in [DESIGN.md](DESIGN.md) has the details, and what the relays and STUN servers still see.

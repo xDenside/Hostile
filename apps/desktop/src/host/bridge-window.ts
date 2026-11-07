@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { BrowserWindow, ipcMain, session, type Session } from 'electron';
-import { BRAND, DESKTOP_ORIGIN } from '@hostile/shared';
+import { BRAND, DESKTOP_ORIGIN, type BridgeIdentity } from '@hostile/shared';
 import { CHANNEL } from '../channels.js';
 import { isSameOrigin } from '../origin.js';
 
@@ -30,6 +30,7 @@ export interface BridgeConfigForPage {
   code: string;
   gatewayUrl: string;
   gatewaySecret: string;
+  identity: BridgeIdentity;
 }
 
 export function openBridgeWindow(

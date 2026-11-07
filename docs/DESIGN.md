@@ -102,22 +102,25 @@ so a new code keeps the person, because the host's key belongs to the host and n
 
 **One code for the whole room.** That has consequences a host should know:
 
-- Anyone with the code can also stand up a fake host on it. A browser remembers the certificate fingerprint of the
-  first host it reached and tells no other host anything: a second host gets neither a connected guest nor its
-  cookie, and when the real host is away the guest waits for it. The host keeps its key from one start to the next.
-  What remains is the first visit: a browser that has never joined this room takes whichever host answers. A fake host
-  gets no password, because there is none, but it does get the nickname and pictures you send it. Closing that needs the
-  fingerprint in the code. A guest who hits a real change of host, such as a new PC or a key past its year, is told
-  so and pastes the code again, which asks as a new person. Their old identity stays on the device if that host returns.
+- Anyone with the code can also stand up a fake host on it, and it gets nothing from a guest, on a first visit or any
+  other. The code names the host's signing key (see "Finding the host"), so a guest believes only a host that signs with
+  it: a fake host with the code but another key never receives a guest's connection details, and the guest never tries
+  to reach the fake's addresses. Behind that, a browser remembers the certificate fingerprint of the first host it reached
+  and tells no other host anything, and when the real host is away the guest waits for it. The host keeps both keys from
+  one start to the next. A guest who hits a real change of host's certificate, such as one past its year, is told so and
+  pastes the code again, which asks as a new person. Their old identity stays on the device if that host returns. A host
+  on a new PC has a new signing key, and so a new code.
 - A copied device identity is that person until the host removes them.
 - A removed person keeps the code and can ask again. The owner can change the code for everyone: Settings, Hosting,
   Make a new code. The old code then reaches nobody, and everyone connected is cut off until given the new one.
 - Every reconnect is a new guest to the rate limits. The gateway caps new guests at 120 a minute, so reconnecting to
   get a fresh budget is slowed, not stopped. Anyone with the code can burn that one shared budget, which refuses new
   guests for as long as they keep at it, and can keep the 20 waiting places full until each lapses.
-- Anyone with the code can read all signalling, because it uses one key: who connects, from which addresses, and each
-  guest's fingerprint. They need only sit on the relay. So a person holding the code who wants the home addresses
-  can have them, for as long as the code lives.
+- Anyone with the code can read the host's half of the signalling on the relay: the host's addresses and fingerprint,
+  and that someone is joining and when. They need only sit on the relay. So a person holding the code can have the host's
+  home address for as long as the code lives. A guest's half is sealed for the host alone, so the code does not give away a
+  guest's address or fingerprint. They can knock, and replay the host's older messages, which can slow a join down but
+  shows them nothing.
 
 ## The tunnel
 
@@ -175,20 +178,40 @@ bits, so it is meant to be pasted, not read aloud. Negotiated data channels run 
 it provides.
 
 Guests join as Trystero's "passive" peers, which never connect to each other, so the app never shows a guest
-another's address. That does not hold against someone with the code, as above. A passive peer waits to hear a non-passive one, and on Nostr a host repeats itself only once a minute, so a
-guest publishes a small message that wakes its own room. That leans on how Trystero 0.26 words its messages, so the
-version is pinned, and the tunnel specs fail if it stops working.
+another's address, and neither does the relay to someone with the code (below). A passive peer waits to hear a
+non-passive one, and on Nostr a host repeats itself only once a minute, so a guest publishes a knock, which carries
+nothing, and the host answers it by announcing itself at once, at most once a second. That leans on how Trystero 0.26
+words its messages, so the version is pinned, and the tunnel specs fail if it stops working.
 
-Everything put on a relay is sealed with a key from the code (`relaySealFor` in `rendezvous.ts`, through a small
-patch to Trystero in `patches/`). A topic is visible to anyone on the relay, and Trystero's own announcements were
-readable and unsigned, so a made-up peer id published to it made the host build a connection and an offer: 650 of them
-stopped real guests joining. Now what lacks the seal is dropped first, and a stranger sees only blobs. A sealed message
-can be replayed, but only ids already seen, which costs the host one offer each.
+The room code names the host. Its 16 bytes are the start of a SHA-256 hash over a label, the host's signing key (ECDSA
+P-256, made once and kept in `host/secrets.json`) and 32 random bytes, which keep the code from being guessed from the key.
+Make a new code changes only those random bytes. A host from before this design gets a new code once, on its first start
+after the upgrade, and its guests need that code.
+
+Everything put on a relay is sealed twice (`hostSealFor` and `guestSealFor` in `rendezvous.ts`, through a small patch to
+Trystero in `patches/`). The outer seal is a key from the code. A topic is visible to anyone on the relay, and Trystero's
+own announcements were readable and unsigned, so a made-up peer id published to it made the host build a connection and
+an offer: 650 of them stopped real guests joining. Now what lacks the outer seal is dropped first, before any work with
+keys, and a stranger sees only blobs. Inside it:
+
+- The host signs everything it sends with its signing key, together with the code, a fresh key for this run of the
+  bridge (ECDH P-256, held only in memory) and the time the run started. A guest checks that the code names the signing key and that the signature
+  holds, and drops anything else. So a host with the code but another key cannot be believed.
+- A guest seals everything it sends for that run key, with a fresh key of its own for each message, so only the host can
+  open it. Another code holder sees a blob.
+- Until a guest has checked a host, the only thing it may put on a relay is the knock.
+
+A sealed message can be replayed. A guest follows the run that started last and never goes back to an earlier one. So the
+host's messages from an earlier run, replayed to a guest that has not yet heard the current one, can send it to a run key
+the host no longer holds, which slows that join until the host speaks again. If the host's clock was ahead during an
+earlier run and has since been set right, that run's messages win, and replaying them can hold up joins for as long as
+someone keeps at it. A guest's, replayed to the host, costs it one offer each, for ids already seen.
 
 A relay's operator still sees the IP address of the host and of every guest, and can link them by topic, with no code
 needed. So anyone running one of the public relays Trystero picks can find a host's home address. That comes with using
 public relays: to reduce it, a host would choose its relays, and nothing lets it yet. The relays never see the code,
-and never read a message.
+and never read a message. A STUN server sees the address of every page that asks it, and the host, which every guest
+connects to directly, sees every guest's.
 
 Chromium offers a page that has no microphone permission only its default-route address, as an mDNS name unless told
 otherwise. Every guest on a first visit is such a page, and that is fine across real networks, where the public address

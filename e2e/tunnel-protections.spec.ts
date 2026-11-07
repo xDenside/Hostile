@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
@@ -11,15 +11,16 @@ import {
   TUNNEL_MAX_FRAME,
 } from '../packages/shared/src/tunnel';
 import { startTunnelGateway } from '../apps/server/src/tunnel/gateway';
-import { USERS } from './helpers';
+import { pinNoiseMode, USERS } from './helpers';
 import {
   API_URL,
+  bridgeFragment,
   GUEST_URL,
   comeBack,
   joinAndAsk,
   joinAndSignIn,
   joinByCode,
-  newCode,
+  newRoom,
   ROOM_ORIGIN,
   startOwnRoomServer,
   startTunnelHost,
@@ -27,6 +28,73 @@ import {
 } from './tunnel-harness';
 
 const { WebSocket } = createRequire(import.meta.url)('ws') as { WebSocket: typeof NodeWebSocket };
+
+const RELAY = `ws://127.0.0.1:${process.env.E2E_RENDEZVOUS_PORT ?? 5292}`;
+
+const openRelay = () =>
+  new Promise<NodeWebSocket>((resolve, reject) => {
+    const socket = new WebSocket(RELAY);
+    socket.on('open', () => resolve(socket));
+    socket.on('error', reject);
+  });
+
+interface RelayEvent {
+  topic: string;
+  content: string;
+  kind: number;
+  pubkey: string;
+}
+
+async function sniffRelay() {
+  const socket = await openRelay();
+  const events: RelayEvent[] = [];
+  const listening = new Promise<void>((resolve) => {
+    socket.on('message', (raw) => {
+      const message = JSON.parse(String(raw)) as [
+        string,
+        string,
+        { tags: string[][]; content: string; kind: number; pubkey: string },
+      ];
+      if (message[0] === 'EOSE') resolve();
+      if (message[0] === 'EVENT')
+        events.push({
+          topic: message[2].tags[0]![1]!,
+          content: message[2].content,
+          kind: message[2].kind,
+          pubkey: message[2].pubkey,
+        });
+    });
+  });
+  socket.send(JSON.stringify(['REQ', 'all', {}]));
+  await listening;
+  return { events, close: () => socket.close() };
+}
+
+function openedWithCode(events: RelayEvent[], code: string) {
+  const key = createHash('sha256')
+    .update(`hostile-relay/${parseRoomCode(code)}`)
+    .digest();
+  const opened: { pubkey: string; text: string; envelope: Record<string, unknown> }[] = [];
+  for (const event of events) {
+    let text: string;
+    try {
+      const whole = Buffer.from(event.content, 'base64');
+      const decipher = createDecipheriv('aes-256-gcm', key, whole.subarray(0, 12));
+      decipher.setAuthTag(whole.subarray(-16));
+      text = Buffer.concat([decipher.update(whole.subarray(12, -16)), decipher.final()]).toString();
+    } catch {
+      continue;
+    }
+    let envelope: Record<string, unknown>;
+    try {
+      envelope = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      envelope = {};
+    }
+    opened.push({ pubkey: event.pubkey, text, envelope });
+  }
+  return opened;
+}
 
 async function recordChannels(context: BrowserContext) {
   await context.addInitScript(() => {
@@ -40,6 +108,30 @@ async function recordChannels(context: BrowserContext) {
     };
   });
 }
+
+async function recordRemoteFingerprints(context: BrowserContext) {
+  await context.addInitScript(() => {
+    const native = RTCPeerConnection.prototype.setRemoteDescription as (
+      this: RTCPeerConnection,
+      description?: RTCSessionDescriptionInit,
+    ) => Promise<void>;
+    const seen = new Set<string>();
+    (window as unknown as { __remoteFingerprints: Set<string> }).__remoteFingerprints = seen;
+    RTCPeerConnection.prototype.setRemoteDescription = function (
+      this: RTCPeerConnection,
+      description?: RTCSessionDescriptionInit,
+    ) {
+      const found = /a=fingerprint:\S+ (\S+)/i.exec(description?.sdp ?? '');
+      if (found) seen.add(found[1]!.toUpperCase());
+      return native.call(this, description);
+    };
+  });
+}
+
+const remoteFingerprintsOf = (page: Page) =>
+  page.evaluate(() => [
+    ...(window as unknown as { __remoteFingerprints: Set<string> }).__remoteFingerprints,
+  ]);
 
 function rawExchange(page: Page, frame: Uint8Array) {
   return page.evaluate(
@@ -157,7 +249,7 @@ test.describe('tunnel protections', () => {
     });
     await expect(page.getByTestId('join-failed')).toContainText('not a room code');
 
-    const noHost = newCode();
+    const noHost = newRoom().code;
     expect(parseRoomCode(noHost)).not.toBeNull();
     await page.getByLabel('Room code').fill(noHost);
     await page.getByRole('button', { name: /Try again|Connect/ }).click();
@@ -169,7 +261,7 @@ test.describe('tunnel protections', () => {
 
     await page.routeWebSocket(/:5292/, (ws) => void ws.close());
     await page.reload();
-    await page.getByLabel('Room code').fill(newCode());
+    await page.getByLabel('Room code').fill(newRoom().code);
     await page.getByRole('button', { name: /Try again|Connect/ }).click();
     await expect(page.getByTestId('join-failed')).toHaveAttribute('data-step', 'meeting-point', {
       timeout: 20_000,
@@ -304,15 +396,100 @@ async function recordingServer() {
 test.describe('tunnel protections against other people on the relay', () => {
   test.setTimeout(240_000);
 
-  test('a second host with the same code gets neither the guest nor the cookie', async ({
+  test("a code holder on the relay cannot read a guest's addresses", async ({ browser }) => {
+    const sniffer = await sniffRelay();
+    const host = await startTunnelHost();
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      await joinByCode(page, host.code);
+      await page.waitForTimeout(3000);
+      const opened = openedWithCode(sniffer.events, host.code);
+      const hostKeys = new Set(opened.filter((o) => o.envelope.t === 'h').map((o) => o.pubkey));
+      expect(hostKeys.size, 'one host signed what it put on the relay').toBe(1);
+      const fromHost = opened.filter((o) => hostKeys.has(o.pubkey));
+      const fromGuest = opened.filter((o) => !hostKeys.has(o.pubkey));
+      expect(fromHost.map((o) => o.envelope.t)).toEqual(fromHost.map(() => 'h'));
+      expect(
+        fromHost.some((o) => /"(offer|answer)":/.test(String(o.envelope.b))),
+        "the host's half of the exchange was on the relay",
+      ).toBe(true);
+      expect(
+        fromGuest.filter((o) => o.envelope.t === 'g').length,
+        "the guest's half went sealed for the host",
+      ).toBeGreaterThan(1);
+      for (const { envelope, text } of fromGuest) {
+        if (envelope.t === 'k') {
+          expect(envelope).toEqual({ v: 1, t: 'k' });
+          continue;
+        }
+        expect(Object.keys(envelope).sort(), text.slice(0, 200)).toEqual(['c', 'e', 'i', 't', 'v']);
+        expect(envelope.t).toBe('g');
+        const sealed = Buffer.from(String(envelope.c), 'base64').toString('latin1');
+        for (const words of ['candidate', 'a=fingerprint', 'IN IP4', 'typ host', 'peerId'])
+          expect(sealed).not.toContain(words);
+      }
+    } finally {
+      sniffer.close();
+      await context.close();
+      await host.stop();
+    }
+  });
+
+  test('a first-time guest never reaches a host the code does not name', async ({ browser }) => {
+    const room = newRoom();
+    const record = await recordingServer();
+    const sniffer = await sniffRelay();
+    const fake = await startTunnelHost({
+      room: { code: room.code, identity: newRoom().identity },
+      roomUrl: record.url,
+      livekitUrl: null,
+    });
+    const context = await browser.newContext();
+    let real: TunnelHost | null = null;
+    try {
+      const page = await context.newPage();
+      await pinNoiseMode(page);
+      await page.goto(`${GUEST_URL}/`);
+      await page.getByLabel('Room code').fill(room.code);
+      await page.getByRole('button', { name: 'Connect' }).click();
+      await expect(page.getByTestId('join-failed')).toHaveAttribute('data-step', 'finding-host', {
+        timeout: 40_000,
+      });
+      expect(record.seen, 'what reached the host the code does not name').toEqual([]);
+      const fromGuest = openedWithCode(sniffer.events, room.code).filter(
+        (o) => o.envelope.t !== 'h',
+      );
+      expect(fromGuest.length).toBeGreaterThan(0);
+      expect(
+        fromGuest.map((o) => o.envelope),
+        'all a first-time guest put on the relay',
+      ).toEqual(fromGuest.map(() => ({ v: 1, t: 'k' })));
+
+      await page.getByRole('button', { name: /Try again|Connect/ }).click();
+      await expect(page.getByTestId('join-failed')).toHaveCount(0);
+      real = await startTunnelHost({ room });
+      await expect(page.getByLabel('Nickname')).toBeVisible({ timeout: 45_000 });
+      expect(record.seen, 'what reached the host the code does not name').toEqual([]);
+    } finally {
+      sniffer.close();
+      await context.close();
+      await fake.stop();
+      await real?.stop();
+      record.close();
+    }
+  });
+
+  test('a second host with the same code and key gets neither the guest nor the cookie', async ({
     browser,
   }) => {
     const real = await startTunnelHost();
     const context = await browser.newContext();
+    await recordRemoteFingerprints(context);
     const page = await context.newPage();
     await joinAndSignIn(page, real.code, USERS.bob);
     const record = await recordingServer();
-    const fake = await startTunnelHost({ code: real.code, roomUrl: record.url, livekitUrl: null });
+    const fake = await startTunnelHost({ room: real.room, roomUrl: record.url, livekitUrl: null });
     try {
       await page.waitForTimeout(15_000);
       expect(record.seen, 'what reached the second host').toEqual([]);
@@ -322,9 +499,13 @@ test.describe('tunnel protections against other people on the relay', () => {
       await expect.poll(() => real.gateway.guests(), { timeout: 30_000 }).toBe(0);
       await page.waitForTimeout(30_000);
       expect(record.seen, 'what reached the second host').toEqual([]);
+      expect(
+        await remoteFingerprintsOf(page),
+        'certificates the guest saw: the real host and the second one',
+      ).toHaveLength(2);
 
       await real.openBridge();
-      await expect.poll(() => real.gateway.guests(), { timeout: 60_000 }).toBe(2);
+      await expect.poll(() => real.gateway.guests(), { timeout: 60_000 }).toBe(1);
       await expect(page.getByTestId('connection-state')).toHaveAttribute(
         'data-state',
         'connected',
@@ -336,6 +517,9 @@ test.describe('tunnel protections against other people on the relay', () => {
         return (await netFetch('/api/auth/session')).status as number;
       });
       expect(status, 'the guest is signed in with the real host').toBe(200);
+      await expect
+        .poll(() => fake.gateway.guests(), { message: 'links to the second host', timeout: 15_000 })
+        .toBe(0);
     } finally {
       await fake.stop();
       await real.stop();
@@ -378,7 +562,8 @@ test.describe('tunnel protections against other people on the relay', () => {
   test('a stranger with no code cannot make the host spend anything, or read the relay', async ({
     browser,
   }) => {
-    const code = newCode();
+    const room = newRoom();
+    const code = room.code;
     const secret = randomBytes(32).toString('hex');
     const gateway = await startTunnelGateway({
       roomUrl: API_URL,
@@ -388,29 +573,8 @@ test.describe('tunnel protections against other people on the relay', () => {
       roomTrustProxy: 'loopback',
       roomToken: randomBytes(32).toString('hex'),
     });
-    const relay = `ws://127.0.0.1:${process.env.E2E_RENDEZVOUS_PORT ?? 5292}`;
-    const open = () =>
-      new Promise<NodeWebSocket>((resolve, reject) => {
-        const socket = new WebSocket(relay);
-        socket.on('open', () => resolve(socket));
-        socket.on('error', reject);
-      });
-    const events: { topic: string; content: string; kind: number }[] = [];
-    const sniffer = await open();
-    sniffer.on('message', (raw) => {
-      const message = JSON.parse(String(raw)) as [
-        string,
-        string,
-        { tags: string[][]; content: string; kind: number },
-      ];
-      if (message[0] === 'EVENT')
-        events.push({
-          topic: message[2].tags[0]![1]!,
-          content: message[2].content,
-          kind: message[2].kind,
-        });
-    });
-    sniffer.send(JSON.stringify(['REQ', 'all', {}]));
+    const sniffer = await sniffRelay();
+    const events = sniffer.events;
     const hostBrowser = await chromium.launch({
       channel: 'chromium',
       args: [
@@ -418,7 +582,7 @@ test.describe('tunnel protections against other people on the relay', () => {
         '--allow-loopback-in-peer-connection',
       ],
     });
-    const flooder = await open();
+    const flooder = await openRelay();
     const context = await browser.newContext();
     try {
       const bridge = await hostBrowser.newPage({ permissions: ['microphone'] });
@@ -433,8 +597,7 @@ test.describe('tunnel protections against other people on the relay', () => {
           }
         };
       });
-      const config = btoa(JSON.stringify({ code, gatewayUrl: gateway.url, gatewaySecret: secret }));
-      await bridge.goto(`${GUEST_URL}/bridge.html#${config}`);
+      await bridge.goto(`${GUEST_URL}/bridge.html#${bridgeFragment(room, gateway.url, secret)}`);
       await expect(bridge.locator('#status')).toHaveAttribute('data-room', 'open', {
         timeout: 30_000,
       });

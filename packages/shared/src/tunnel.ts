@@ -175,6 +175,14 @@ export function checkTunnelRoute(
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const ROOM_CODE_BYTES = 16;
+export const ROOM_CODE_SALT_BYTES = 32;
+export const HOST_KEY_BYTES = 65;
+
+export interface BridgeIdentity {
+  privateKey: string;
+  publicKey: string;
+  salt: string;
+}
 
 function crc16(bytes: Uint8Array): number {
   let crc = 0xffff;
@@ -232,4 +240,15 @@ export function parseRoomCode(text: string): string | null {
   const sum = (bytes[ROOM_CODE_BYTES]! << 8) | bytes[ROOM_CODE_BYTES + 1]!;
   if (crc16(secret) !== sum) return null;
   return [...secret].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function roomCodeInput(identityPublicKey: Uint8Array, salt: Uint8Array) {
+  if (identityPublicKey.length !== HOST_KEY_BYTES || salt.length !== ROOM_CODE_SALT_BYTES)
+    throw new Error('A room code needs a 65-byte public key and a 32-byte salt.');
+  const label = encoder.encode('hostile-room-code/1');
+  const input = new Uint8Array(label.length + 1 + HOST_KEY_BYTES + ROOM_CODE_SALT_BYTES);
+  input.set(label);
+  input.set(identityPublicKey, label.length + 1);
+  input.set(salt, label.length + 1 + HOST_KEY_BYTES);
+  return input;
 }

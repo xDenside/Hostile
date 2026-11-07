@@ -9,6 +9,7 @@ import {
   FRAME,
   frameIsBulk,
   parseRoomCode,
+  roomCodeInput,
   TUNNEL_BULK_BIT,
   TUNNEL_MAX_FRAME,
 } from '../src/tunnel';
@@ -118,5 +119,19 @@ describe('room codes', () => {
     expect(parseRoomCode('')).toBeNull();
     expect(parseRoomCode('not-a-code')).toBeNull();
     expect(parseRoomCode(code.slice(1))).toBeNull();
+  });
+
+  it('commits to the host key and salt in one fixed layout', () => {
+    const key = Uint8Array.from({ length: 65 }, (_, i) => (i === 0 ? 4 : i));
+    const salt = Uint8Array.from({ length: 32 }, (_, i) => 0xa0 + i);
+    const input = roomCodeInput(key, salt);
+    const label = new TextEncoder().encode('hostile-room-code/1');
+    expect(input.length).toBe(label.length + 1 + 65 + 32);
+    expect([...input.subarray(0, label.length)]).toEqual([...label]);
+    expect(input[label.length]).toBe(0);
+    expect([...input.subarray(label.length + 1, label.length + 66)]).toEqual([...key]);
+    expect([...input.subarray(label.length + 66)]).toEqual([...salt]);
+    expect(() => roomCodeInput(key.subarray(1), salt)).toThrow();
+    expect(() => roomCodeInput(key, salt.subarray(1))).toThrow();
   });
 });
