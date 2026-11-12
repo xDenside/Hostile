@@ -25,15 +25,17 @@ export function deviceToken(secret: string, sessionId: string): string {
 }
 
 export async function bindDevice(db: Db, secret: string, sessionId: string, deviceKey: string) {
-  await db.session.updateMany({
-    where: { deviceKey, id: { not: sessionId } },
-    data: { deviceKey: null },
-  });
   const token = deviceToken(secret, sessionId);
-  await db.session.update({
-    where: { id: sessionId },
-    data: { deviceKey, tokenHash: sha256Hex(token) },
-  });
+  await db.$transaction([
+    db.session.updateMany({
+      where: { deviceKey, id: { not: sessionId } },
+      data: { deviceKey: null },
+    }),
+    db.session.update({
+      where: { id: sessionId },
+      data: { deviceKey, tokenHash: sha256Hex(token) },
+    }),
+  ]);
   return token;
 }
 

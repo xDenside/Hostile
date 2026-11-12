@@ -37,6 +37,35 @@ async function ownerSession() {
 }
 
 describe('asking to join', () => {
+  it('two answers at the same moment make one person', async () => {
+    const owner = await ownerSession();
+    const before = await api.ctx.db.user.count();
+    const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const deviceKey = publicKey.export({ type: 'spki', format: 'der' }).toString('base64url');
+    const asked = await api.http().post('/api/join').send({ nickname: 'Sam', deviceKey });
+    expect(asked.status).toBe(201);
+    const list = await api
+      .http()
+      .get('/api/admin/join-requests')
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+    const id = list.body.requests[0].id as string;
+    const answer = (what: 'let-in' | 'turn-away') =>
+      api
+        .http()
+        .post(`/api/admin/join-requests/${id}/${what}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({});
+    const statuses = (
+      await Promise.all([answer('let-in'), answer('let-in'), answer('turn-away')])
+    ).map((r) => r.status);
+    expect(statuses.filter((status) => status < 300)).toHaveLength(1);
+    expect(statuses.filter((status) => status === 404)).toHaveLength(2);
+    expect(await api.ctx.db.user.count()).toBe(before + 1);
+    expect(await api.ctx.db.session.count({ where: { deviceKey } })).toBe(1);
+    const status = await api.http().get(`/api/join/${(asked.body as { ticket: string }).ticket}`);
+    expect(status.body.status).toBe('admitted');
+  });
+
   it('turned away: no person, session or file exists afterwards, and they may ask again', async () => {
     const owner = await ownerSession();
     const before = await api.ctx.db.user.count();

@@ -242,14 +242,42 @@ export class VoiceService {
     if (!channelId) return;
     const changesBefore = this.changeCount(channelId);
     const participants = await this.roomClient.listParticipants(roomName);
+    const present = participants.filter(
+      (p) => p.kind === 0 && p.state !== ParticipantInfo_State.DISCONNECTED,
+    );
+    const ids = present.map((p) => p.identity).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+    let members: Set<string>;
+    let open: boolean;
+    try {
+      const [users, channel] = await Promise.all([
+        ids.length
+          ? this.db.user.findMany({
+              where: { id: { in: ids }, disabledAt: null },
+              select: { id: true },
+            })
+          : [],
+        present.length ? this.db.channel.findUnique({ where: { id: channelId } }) : null,
+      ]);
+      members = new Set(users.map((user) => user.id));
+      open = !!channel && !channel.archivedAt && channel.type === 'VOICE';
+    } catch (err) {
+      this.log.warn(
+        { err: (err as Error).message, roomName },
+        'could not check voice participant authorization: the database did not answer',
+      );
+      return;
+    }
     const next = new Map<string, ParticipantState>();
-    for (const p of participants) {
-      if (p.kind !== 0) continue;
-      if (p.state === ParticipantInfo_State.DISCONNECTED) continue;
-      const access = await this.enforceAccess(roomName, p.identity);
-      if (access === 'unknown') return;
-      if (access === 'denied') continue;
-      next.set(p.identity, this.toState(p));
+    for (const p of present) {
+      if (open && members.has(p.identity)) {
+        next.set(p.identity, this.toState(p));
+        continue;
+      }
+      this.log.warn(
+        { roomName, identity: p.identity },
+        'removing unauthorized participant from LiveKit room',
+      );
+      await this.roomClient.removeParticipant(roomName, p.identity).catch(() => undefined);
     }
     if (this.changeCount(channelId) !== changesBefore) return;
     if (next.size) this.rooms.set(channelId, next);

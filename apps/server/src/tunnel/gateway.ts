@@ -172,6 +172,7 @@ class GuestLink {
   readonly address = guestAddress();
   private readonly cookies = new LinkCookies();
   private readonly streams = new Map<number, Stream>();
+  private readonly checking = new Set<number>();
   private lastSeen = Date.now();
   private readonly joinedAt = Date.now();
   private readonly opens = new Bucket(OPENS_PER_SECOND, OPENS_BURST);
@@ -216,6 +217,7 @@ class GuestLink {
     this.over = true;
     for (const stream of this.streams.values()) stream.destroy();
     this.streams.clear();
+    this.checking.clear();
     if (this.socket.readyState === WebSocket.OPEN) this.socket.close(1000);
     this.onGone();
   }
@@ -241,14 +243,20 @@ class GuestLink {
         return this.send(encodeFrame(FRAME.PONG, 0));
       case FRAME.OPEN_HTTP:
       case FRAME.OPEN_WS: {
-        if (this.streams.has(streamId)) return this.bye('protocol_error');
-        if (this.streams.size >= TUNNEL_MAX_STREAMS) return this.bye('too_many_streams');
+        if (this.streams.has(streamId) || this.checking.has(streamId))
+          return this.bye('protocol_error');
+        if (this.streams.size + this.checking.size >= TUNNEL_MAX_STREAMS)
+          return this.bye('too_many_streams');
         if (!this.opens.take()) return this.bye('too_many_streams');
         if (!this.roomOpens.take()) return this.reset(streamId, 'refused', 'the host is busy');
         return type === FRAME.OPEN_HTTP
           ? this.openHttp(streamId, parseJsonPayload<TunnelOpenHttp>(payload))
           : this.openWs(streamId, parseJsonPayload<TunnelOpenWs>(payload));
       }
+    }
+    if (this.checking.has(streamId)) {
+      if (type === FRAME.RESET || type === FRAME.CLOSE) this.checking.delete(streamId);
+      return;
     }
     const stream = this.streams.get(streamId);
     if (!stream) return;
@@ -415,8 +423,9 @@ class GuestLink {
     if (!open || !route.ok)
       return this.reset(id, 'refused', route.ok ? 'bad request' : route.reason);
     if (route.target !== 'livekit') return this.connectWs(id, open, route);
+    this.checking.add(id);
     void this.mayJoinCall(route.path).then((allowed) => {
-      if (this.over) return;
+      if (!this.checking.delete(id) || this.over) return;
       if (!allowed) return this.reset(id, 'refused', 'not allowed in this call');
       this.connectWs(id, open, route);
     });

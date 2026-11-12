@@ -171,12 +171,21 @@ export class JoinRequests {
     this.events.emit('changed');
   }
 
+  private readonly claimed = new Set<string>();
+
   claim(id: string) {
     const { nickname, picture, userAgent, deviceKey } = this.waitingById(id);
+    if (this.claimed.has(id)) throw errors.notFound('Request');
+    this.claimed.add(id);
     return { nickname, picture, userAgent, deviceKey };
   }
 
+  release(id: string) {
+    this.claimed.delete(id);
+  }
+
   admitted(id: string, result: { token: string; sessionId: string; userId: string }) {
+    this.claimed.delete(id);
     const request = this.waitingById(id);
     request.picture = null;
     request.answer = { kind: 'admitted', at: this.now(), ...result };
@@ -185,6 +194,7 @@ export class JoinRequests {
 
   turnAway(id: string) {
     const request = this.waitingById(id);
+    if (this.claimed.has(id)) throw errors.notFound('Request');
     request.picture = null;
     request.answer = { kind: 'turned-away', at: this.now() };
     this.events.emit('changed');

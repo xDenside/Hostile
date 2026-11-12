@@ -60,6 +60,10 @@ function fakeDb(
         await onUserLookup();
         return { id: userId, disabledAt: null };
       },
+      findMany: async (query: { where: { id: { in: string[] } } }) => {
+        await onUserLookup();
+        return query.where.id.in.map((id) => ({ id }));
+      },
     },
     channel: {
       findUnique: async () => ({ id: channelId, type: 'VOICE', archivedAt: null }),

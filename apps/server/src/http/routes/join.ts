@@ -50,19 +50,27 @@ const vouchedFor =
 export async function letIn(ctx: AppContext, requestId: string) {
   const { nickname, picture, userAgent, deviceKey } = ctx.joinRequests.claim(requestId);
   const id = randomUUID();
-  let user = await ctx.db.user.create({
-    data: { id, displayName: nickname, avatarColor: defaultAvatarColor(id), role: 'MEMBER' },
-  });
-  if (picture) user = await setProfileImage(ctx.db, ctx.log, id, 'avatar', picture.bytes);
-  const created = await ctx.sessions.create(user, 'WEB', userAgent);
-  const { session } = created;
-  const token = deviceKey
-    ? await bindDevice(ctx.db, ctx.config.sessionSecret, session.id, deviceKey)
-    : created.token;
-  ctx.joinRequests.admitted(requestId, { token, sessionId: session.id, userId: id });
-  ctx.log.info({ userId: id }, 'let in');
-  ctx.realtime.toCommunity('member:upserted', toUserPublic(user));
-  return { user, session, token };
+  let made = false;
+  try {
+    let user = await ctx.db.user.create({
+      data: { id, displayName: nickname, avatarColor: defaultAvatarColor(id), role: 'MEMBER' },
+    });
+    made = true;
+    if (picture) user = await setProfileImage(ctx.db, ctx.log, id, 'avatar', picture.bytes);
+    const created = await ctx.sessions.create(user, 'WEB', userAgent);
+    const { session } = created;
+    const token = deviceKey
+      ? await bindDevice(ctx.db, ctx.config.sessionSecret, session.id, deviceKey)
+      : created.token;
+    ctx.joinRequests.admitted(requestId, { token, sessionId: session.id, userId: id });
+    ctx.log.info({ userId: id }, 'let in');
+    ctx.realtime.toCommunity('member:upserted', toUserPublic(user));
+    return { user, session, token };
+  } catch (err) {
+    ctx.joinRequests.release(requestId);
+    if (made) await ctx.db.user.delete({ where: { id } }).catch(() => undefined);
+    throw err;
+  }
 }
 
 export function joinRoutes(ctx: AppContext): Router {
@@ -86,6 +94,10 @@ export function joinRoutes(ctx: AppContext): Router {
   router.post('/', async (req: Request, res) => {
     const body = parseBody(joinAskSchema, req.body);
     if (req.auth) return res.json(admittedBody(req.auth.user, req.auth.session));
+    if (!ctx.config.joinAutoAdmit) {
+      const limit = ctx.limiter.consume('join-ask:room', 40, 60_000);
+      if (!limit.ok) throw errors.rateLimited(limit.retryAfterSec);
+    }
     const address = req.ip ?? 'unknown';
     const userAgent = req.get('user-agent');
     const asked = ctx.joinRequests.ask({
