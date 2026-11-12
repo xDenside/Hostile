@@ -64,9 +64,9 @@ export function Button({
         wide && styles.wide,
         className,
       )}
+      {...rest}
       disabled={rest.disabled || busy}
       aria-busy={busy || undefined}
-      {...rest}
     >
       {busy ? <span className={styles.spinner} aria-hidden /> : null}
       {children}

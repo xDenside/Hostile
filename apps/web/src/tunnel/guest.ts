@@ -445,8 +445,9 @@ async function connect(mine: number): Promise<boolean> {
       Object.values(getRelaySockets() as Record<string, WebSocket>).some(
         (s) => s.readyState === WebSocket.OPEN,
       );
-    if (!(await waitFor(socketsOpen, MEETING_POINT_MS, gone)) && !gone())
-      throw new StepFailure('meeting-point');
+    const reached = await waitFor(socketsOpen, MEETING_POINT_MS, gone);
+    if (gone()) return false;
+    if (!reached) throw new StepFailure('meeting-point');
 
     step('finding-host');
     const topic = await rootTopicOf(roomId);
@@ -479,6 +480,8 @@ async function connect(mine: number): Promise<boolean> {
     if (mine !== attempt) return false;
     const failure = err instanceof StepFailure ? err : null;
     stopKnocking();
+    room?.leave().catch(() => undefined);
+    room = null;
     const { phase } = useTunnel.getState();
     const retryable = failure?.step !== 'code' && storedCode() === code;
     const retryAt = retryable ? Date.now() + RETRY_MS : null;

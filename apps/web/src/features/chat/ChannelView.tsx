@@ -608,6 +608,7 @@ function MessageEditor({ message, hasFiles }: { message: MessageDTO; hasFiles: b
   }
 
   async function commit() {
+    if (busy) return;
     const text = draft.trim();
     if ((!text && !hasFiles) || text === message.content) {
       finish();

@@ -102,6 +102,10 @@ export function MicTest() {
               err instanceof Error ? err.message : String(err),
             );
             release();
+            if (!stale())
+              setError(
+                'Noise suppression could not start on this device. Test again to hear the microphone without it.',
+              );
             return;
           }
           if (!ownProcessor) {

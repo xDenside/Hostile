@@ -1,4 +1,5 @@
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+const headerTimeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
   month: 'short',
@@ -19,9 +20,9 @@ export function formatMessageTimestamp(iso: string, now = new Date()): string {
   const d = new Date(iso);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const t = d.getTime();
-  if (t >= startOfToday) return `Today at ${timeFmt.format(d)}`;
-  if (t >= startOfToday - 86_400_000) return `Yesterday at ${timeFmt.format(d)}`;
-  return `${dateFmt.format(d)} ${timeFmt.format(d)}`;
+  if (t >= startOfToday) return `Today at ${headerTimeFmt.format(d)}`;
+  if (t >= startOfToday - 86_400_000) return `Yesterday at ${headerTimeFmt.format(d)}`;
+  return `${dateFmt.format(d)} ${headerTimeFmt.format(d)}`;
 }
 
 export function isSameMinute(a: string, b: string): boolean {

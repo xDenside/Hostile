@@ -48,6 +48,7 @@ function readKept(): Kept | null {
 let timer: ReturnType<typeof setTimeout> | null = null;
 let current: Kept | null = null;
 let draftInMemory = false;
+let settled = 0;
 
 function stopLooking() {
   if (timer) clearTimeout(timer);
@@ -55,6 +56,7 @@ function stopLooking() {
 }
 
 function settle(phase: AskPhase, error: string | null = null) {
+  settled++;
   stopLooking();
   current = null;
   localStorage.removeItem(keptKey());
@@ -113,17 +115,28 @@ async function look() {
 
 async function send(startedAt: number) {
   const { nickname, avatar } = useAsk.getState();
+  const mine = settled;
+  let ticket: string | null = null;
+  const drop = (id: string) => void endpoints.join.cancel(id).catch(() => undefined);
   try {
     const answer = await endpoints.join.ask(nickname, !!avatar, currentDeviceKey());
+    if (mine !== settled) {
+      if (!('status' in answer)) drop(answer.ticket);
+      return;
+    }
     if ('status' in answer) return await enter(answer, false);
-    const kept: Kept = { ticket: answer.ticket, nickname, startedAt };
+    ticket = answer.ticket;
+    const kept: Kept = { ticket, nickname, startedAt };
     current = kept;
     localStorage.setItem(keptKey(), JSON.stringify(kept));
-    if (avatar) await endpoints.join.picture(answer.ticket, avatar);
+    if (avatar) await endpoints.join.picture(ticket, avatar);
+    if (mine !== settled) return;
     lookSoon();
   } catch (err) {
+    if (mine !== settled) return;
     if (err instanceof ApiError && !err.isNetwork && err.status >= 400 && err.status < 500) {
       if (err.status !== 429) {
+        if (ticket) drop(ticket);
         settle('form', errorMessage(err));
         return;
       }

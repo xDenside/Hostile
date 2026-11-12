@@ -501,6 +501,14 @@ class VoiceController {
       if (outcome === 'no-microphone') {
         await dropOwnProcessor();
         track.stop();
+        if (seq === this.joinSeq && this.room === room && !get().error) {
+          set({
+            micPublished: false,
+            error:
+              this.captureFailure ??
+              voiceError('mic-busy', 'The microphone could not be started. You can still listen.'),
+          });
+        }
         return;
       }
     }
@@ -606,6 +614,8 @@ class VoiceController {
     }
   }
 
+  private captureFailure: VoiceError | null = null;
+
   private async reopenCapture(
     track: LocalAudioTrack,
     constraints: CaptureConstraints,
@@ -613,10 +623,12 @@ class VoiceController {
     try {
       await track.restartTrack({ deviceId: get().inputDeviceId, ...constraints });
       this.micConstraints = constraints;
+      this.captureFailure = null;
       return true;
     } catch (err) {
       this.micConstraints = null;
-      if (this.micTrack === track) set({ micPublished: false, error: mapMicError(err) });
+      this.captureFailure = mapMicError(err);
+      if (this.micTrack === track) set({ micPublished: false, error: this.captureFailure });
       return false;
     }
   }
@@ -1327,7 +1339,11 @@ class VoiceController {
       })
       .on(lk.RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
         if (!mine()) return;
-        set({ speaking: Object.fromEntries(speakers.map((sp) => [sp.identity, true])) });
+        const before = get().speaking;
+        const same =
+          speakers.length === Object.keys(before).length &&
+          speakers.every((sp) => before[sp.identity]);
+        if (!same) set({ speaking: Object.fromEntries(speakers.map((sp) => [sp.identity, true])) });
       })
       .on(lk.RoomEvent.ConnectionQualityChanged, (quality, p) => {
         if (!mine()) return;

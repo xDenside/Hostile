@@ -44,7 +44,16 @@ export function enterApp(user: SelfUser) {
   }
 }
 
-export async function boot(): Promise<void> {
+let booting: Promise<void> | null = null;
+
+export function boot(): Promise<void> {
+  booting ??= bootOnce().finally(() => {
+    booting = null;
+  });
+  return booting;
+}
+
+async function bootOnce(): Promise<void> {
   const room = desktopRoom();
   if (room?.role === 'none') {
     useSession.setState({ status: 'room-choice' });
