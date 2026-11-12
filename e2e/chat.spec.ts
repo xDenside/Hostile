@@ -131,6 +131,13 @@ test.describe('text chat between two users', () => {
 
     await typeWithoutSending(alice, 'general', 'typing…');
     await expect(bob.getByText(/is typing/)).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(async () => {
+        const pill = (await bob.getByText(/is typing/).boundingBox())!;
+        const last = (await bob.getByTestId('message').last().boundingBox())!;
+        return pill.y - (last.y + last.height);
+      })
+      .toBeGreaterThanOrEqual(0);
 
     await aliceContext.close();
     await bobContext.close();

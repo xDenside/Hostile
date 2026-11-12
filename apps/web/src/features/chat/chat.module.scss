@@ -18,6 +18,10 @@
   overflow-anchor: none;
 }
 
+.list:has(~ .composerWrap .typing:not(:empty)) > div {
+  padding-bottom: 18px;
+}
+
 .loadingTop,
 .startOfChannel {
   padding: var(--sp-4) var(--sp-5);
