@@ -1,0 +1,61 @@
+name: Windows smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose Windows zip is started
+        required: true
+        default: v0.1.1
+
+permissions:
+  contents: read
+
+jobs:
+  start:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download the release zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "*-win.zip" -D dl
+
+      - name: Unpack
+        run: |
+          $zip = Get-ChildItem dl\*.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath app
+          Get-ChildItem app, app\resources\bin
+
+      - name: Media server runs on Windows
+        run: |
+          & app\resources\bin\livekit-server.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "livekit-server exited with $LASTEXITCODE" }
+
+      - name: Start the app and keep it up for 40 seconds
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          $env:ELECTRON_ENABLE_LOGGING = '1'
+          $p = Start-Process app\Hostile.exe -PassThru -RedirectStandardOutput out\stdout.txt -RedirectStandardError out\stderr.txt
+          Start-Sleep -Seconds 40
+          if ($p.HasExited) { throw "Hostile exited with code $($p.ExitCode)" }
+          Get-Process Hostile | Format-Table Id, MainWindowTitle, WS -AutoSize
+          $titled = Get-Process Hostile | Where-Object { $_.MainWindowTitle }
+          if (-not $titled) { throw 'No Hostile window is open' }
+
+      - name: Screenshot
+        if: always()
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          New-Item -ItemType Directory -Force out | Out-Null
+          $bmp.Save("out\screen.png")
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: windows-smoke
+          path: out
