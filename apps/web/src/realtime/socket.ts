@@ -21,7 +21,7 @@ let socket: AppSocket | null = null;
 let sessionEndedHandler: ((reason: SessionEndReason | 'auth') => void) | null = null;
 let bootstrapSeq = 0;
 
-async function synchronize() {
+async function synchronize(attempt = 0) {
   const seq = ++bootstrapSeq;
   try {
     const b = await endpoints.bootstrap();
@@ -72,6 +72,12 @@ async function synchronize() {
   } catch (err) {
     if (seq !== bootstrapSeq) return;
     useCommunity.setState({ connectionError: `Could not load data: ${errorMessage(err)}` });
+    setTimeout(
+      () => {
+        if (seq === bootstrapSeq && socket?.connected) void synchronize(attempt + 1);
+      },
+      Math.min(30_000, 1000 * 2 ** attempt),
+    );
   }
 }
 
@@ -119,6 +125,10 @@ export function connectRealtime(onSessionEnded: (reason: SessionEndReason | 'aut
       connection: 'reconnecting',
       connectionError: s.active ? null : err.message,
     });
+    if (!s.active)
+      setTimeout(() => {
+        if (socket === s && !s.connected && !s.active) s.connect();
+      }, 3000);
   });
 
   s.on('session:ended', ({ reason }) => sessionEndedHandler?.(reason));

@@ -71,7 +71,15 @@ export class RealtimeHub implements RealtimeEmitter {
     this.io.use((socket, next) => {
       this.authenticate(socket as AppSocket)
         .then(() => next())
-        .catch((err: Error & { data?: unknown }) => next(err));
+        .catch((err: Error & { data?: unknown }) => {
+          if (err.data) return next(err);
+          ctx.log.warn({ err: err.message }, 'could not check a socket handshake');
+          next(
+            Object.assign(new Error('The server is busy. Trying again.'), {
+              data: { code: 'unavailable' },
+            }),
+          );
+        });
     });
     this.io.on('connection', (socket) => this.onConnection(socket as AppSocket));
 
