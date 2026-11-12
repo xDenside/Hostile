@@ -422,4 +422,37 @@ describe('the session cookie stays with the gateway', () => {
     guest.send(rtc(7, 'u1'));
     await expect.poll(() => calls).toBe(1);
   });
+
+  it('holds a call stream number while it checks who is asking', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const upstream = await room((req, res) => {
+      if (req.url === '/api/join/t') res.setHeader('Set-Cookie', 'hostile_session=secret');
+      if (req.url === '/api/auth/session') {
+        void held.then(() => res.end(JSON.stringify({ user: { id: 'u1' } })));
+        return;
+      }
+      res.end('{}');
+    });
+    let calls = 0;
+    const livekit = await startUpstream(() => calls++);
+    const gateway = await startGateway(upstream.url, { livekitUrl: livekit });
+    const token = `x.${Buffer.from(JSON.stringify({ sub: 'u1' })).toString('base64url')}.y`;
+    const rtc = (id: number) =>
+      encodeJsonFrame(FRAME.OPEN_WS, id, {
+        target: 'livekit',
+        path: `/rtc?access_token=${token}`,
+        protocols: [],
+        headers: {},
+      });
+    const guest = await connect(gateway.url);
+    guest.send(get(3, '/api/join/t'));
+    await waitForHead(guest, 3);
+    guest.send(rtc(7));
+    guest.send(rtc(7));
+    await expect.poll(() => guest.byeReason(), { timeout: 5000 }).toBe('protocol_error');
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(calls).toBe(0);
+  });
 });

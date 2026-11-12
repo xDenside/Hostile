@@ -87,6 +87,18 @@ describe('people asking to join', () => {
     expect(list.look(ticket)).toBeNull();
   });
 
+  it('is claimed by one answer at a time, and a failed one frees it', () => {
+    const { list } = requests();
+    const { id } = ask(list, 'a');
+    expect(list.claim(id).nickname).toBe('Sam');
+    expect(() => list.claim(id)).toThrowError(/not found/i);
+    expect(() => list.turnAway(id)).toThrowError(/not found/i);
+    list.release(id);
+    expect(list.claim(id).nickname).toBe('Sam');
+    list.admitted(id, { token: 't', sessionId: 's', userId: 'u' });
+    expect(() => list.claim(id)).toThrowError(/not found/i);
+  });
+
   it('cannot answer anyone twice, or someone unknown', () => {
     const { list } = requests();
     const { id } = ask(list, 'a');
