@@ -251,7 +251,15 @@ test.describe.serial('asking to join, through the real app', () => {
       timeout: 20_000,
     });
 
-    await tab.page.evaluate(() => localStorage.clear());
+    await tab.page.evaluate(async () => {
+      localStorage.clear();
+      await new Promise<void>((resolve, reject) => {
+        const gone = indexedDB.deleteDatabase('hostile-device');
+        gone.onsuccess = () => resolve();
+        gone.onerror = () => reject(gone.error ?? new Error('the device key stayed'));
+        gone.onblocked = () => reject(new Error('the device key is still open'));
+      });
+    });
     await tab.page.goto(GUEST_URL);
     await pasteCode(tab.page, code);
     await askToJoin(tab.page, 'Second Self');
@@ -308,10 +316,12 @@ test.describe.serial('asking to join, through the real app', () => {
   test('proof 6: removing someone ends them at once, in a call too, and they can only ask as someone new', async () => {
     const tab = await newTab();
     await joinThroughHost(host.page, tab.page, code, 'Removed Person');
-    const jar = await tab.page.evaluate(
-      () => Object.entries(localStorage).find(([k]) => k.includes('tunnel:jar'))?.[1] ?? '',
+    const kept = await tab.page.evaluate(() =>
+      Object.entries(localStorage)
+        .filter(([, value]) => value.includes('_session'))
+        .map(([key]) => key),
     );
-    expect(jar).not.toBe('');
+    expect(kept, 'no session token is kept where page scripts can read it').toEqual([]);
     await joinVoice(tab.page, 'General Voice');
     await joinVoice(host.page, 'General Voice');
     await host.page.getByRole('button', { name: 'Settings', exact: true }).first().click();
@@ -331,12 +341,6 @@ test.describe.serial('asking to join, through the real app', () => {
       .getByRole('button', { name: /^Leave|Disconnect/ })
       .first()
       .click();
-
-    const cookie = Object.entries(JSON.parse(jar) as Record<string, { value: string }>)
-      .map(([name, c]) => `${name}=${c.value}`)
-      .join('; ');
-    const replay = await fetch(`${api}/api/auth/session`, { headers: { cookie } });
-    expect(replay.status).toBe(401);
 
     await tab.page.goto(`${GUEST_URL}/`);
     await expect(tab.page.getByLabel('Nickname')).toBeVisible({ timeout: 60_000 });
