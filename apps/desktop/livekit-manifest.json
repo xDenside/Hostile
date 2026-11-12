@@ -8,7 +8,7 @@
   "win32-x64": {
     "version": "1.13.11",
     "source": "https://github.com/livekit/livekit/releases/download/v1.13.11/livekit_1.13.11_windows_amd64.zip",
-    "sha256": ""
+    "sha256": "7c63b07e78121edab0c81554af97754cc7abbaac05313cdb91c81f51287e16c2"
   },
   "linux-x64": {
     "version": "1.13.11",
