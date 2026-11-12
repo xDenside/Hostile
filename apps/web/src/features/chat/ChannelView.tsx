@@ -193,7 +193,7 @@ function MessageList({ channel }: { channel: ChannelDTO }) {
   const [atBottom, setAtBottom] = useState(() => !useChat.getState().jumps[channel.id]);
   const stick = useRef(!useChat.getState().jumps[channel.id]);
   const arrivedByJump = useRef(!!useChat.getState().jumps[channel.id]);
-  const previousHeight = useRef(0);
+  const anchors = useRef<{ id: string; offset: number }[]>([]);
   const firstMessageId = useRef<string | undefined>(undefined);
   const ownScrollTop = useRef(0);
   const heldAtJump = useRef(false);
@@ -217,17 +217,27 @@ function MessageList({ channel }: { channel: ChannelDTO }) {
     const el = scroller.current;
     if (!el) return;
     const topId = win.messages[0]?.id;
+    const offsetOf = (id: string) => {
+      const row = el.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+      return row
+        ? row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+        : null;
+    };
     if (stick.current) el.scrollTop = el.scrollHeight;
-    else if (
-      topId !== firstMessageId.current &&
-      previousHeight.current &&
-      el.scrollHeight > previousHeight.current
-    ) {
-      el.scrollTop += el.scrollHeight - previousHeight.current;
+    else if (topId !== firstMessageId.current) {
+      for (const anchor of anchors.current) {
+        const now = offsetOf(anchor.id);
+        if (now === null) continue;
+        el.scrollTop += now - anchor.offset;
+        break;
+      }
     }
     ownScrollTop.current = el.scrollTop;
     firstMessageId.current = topId;
-    previousHeight.current = el.scrollHeight;
+    anchors.current = [topId, win.messages[win.messages.length - 1]?.id].flatMap((id) => {
+      const offset = id ? offsetOf(id) : null;
+      return id && offset !== null ? [{ id, offset }] : [];
+    });
   }, [win.messages, channelPending.length, loading]);
 
   useLayoutEffect(() => {

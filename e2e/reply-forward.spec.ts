@@ -2201,6 +2201,31 @@ test.describe('jumping to a quote', () => {
     await close();
   });
 
+  test('reading far back keeps the place, also once the newest messages leave the window', async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+    const { alice, bob, close } = await pair(browser);
+    const channel = await newChannel(alice);
+    const tag = stamp();
+    for (let i = 0; i < 360; i++) await post(alice, channel.id, `line ${i} ${tag}`);
+    await openTextChannel(bob, channel.name);
+    const list = bob.getByRole('log');
+    await expect(rowWith(bob, `line 359 ${tag}`)).toBeInViewport();
+    const topId = () =>
+      list.evaluate((el) => el.querySelector('[data-message-id]')?.getAttribute('data-message-id'));
+
+    for (let page = 0; page < 7; page++) {
+      const before = await topId();
+      await list.evaluate((el) => (el.scrollTop = 0));
+      await expect.poll(topId, { timeout: 20_000 }).not.toBe(before);
+      await expect(list.locator(`[data-message-id="${before}"]`)).toBeInViewport();
+    }
+    await expect(rowWith(bob, `line 0 ${tag}`)).toHaveCount(1);
+    await expect(rowWith(bob, `line 359 ${tag}`)).toHaveCount(0);
+    await close();
+  });
+
   test('replying from a page in the past takes the reader to their reply', async ({ browser }) => {
     const { alice, bob, close } = await pair(browser);
     const channel = await newChannel(alice);
