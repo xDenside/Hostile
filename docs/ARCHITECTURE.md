@@ -221,8 +221,8 @@ starting an edit from that menu redraws only the rows concerned.
 One session model, two deliveries:
 
 - **Browser, and a guest in the app**: an opaque session token, delivered as a cookie that does not expire. Through the
-  tunnel the page keeps that cookie itself, per host fingerprint, in `localStorage` (see "A person is their device" in
-  [DESIGN.md](DESIGN.md)). State-changing requests must carry an
+  tunnel the gateway keeps that cookie for each connection, and the device proves who it is with a non-extractable key
+  (see "A person is their device" in [DESIGN.md](DESIGN.md)). State-changing requests must carry an
   `X-CSRF-Token` header whose value is an HMAC of the session id, and an `Origin` header the server
   recognizes. Cross-origin credentialed CORS is never enabled.
 - **The host's own window**: the long-lived token stays in the Electron main process, encrypted with
@@ -257,10 +257,12 @@ and announces it with `channel:upserted` like any other change to a channel.
   screen, which the same `voice:self-state` report carries; the API keeps only ids of people in the
   same room. LiveKit cannot supply it: it does not tell a publisher who has a track on screen.
 - LiveKit 1.13 cannot revoke an already-issued token, and it re-issues tokens to connected
-  participants every five minutes. Removing a participant therefore does not lock them out for good:
-  the API re-checks authorization on every `participant_joined` webhook and on every reconciliation
-  pass, and removes anyone who should not be there. The residual window is documented in
-  [LIMITATIONS.md](LIMITATIONS.md).
+  participants every five minutes. In a hosted room that does not matter: LiveKit's signalling listens
+  on loopback only, so a guest reaches it through the gateway, and the gateway opens a call connection
+  only when that guest's connection is signed in as the person the call token names. Removing someone
+  revokes the session, ends their tunnel at once and removes them from LiveKit, so a held token opens
+  nothing. A server run on its own, with LiveKit reachable directly, still relies on the webhook and
+  reconciliation check described in [SECURITY.md](SECURITY.md#media-authorization).
 - The call lives in a controller outside React (`apps/web/src/features/voice/controller.ts`), so
   browsing text channels, opening settings or re-rendering never disconnects it.
 - Noise suppression on the way out has four settings: off, **standard** (built in: the capture's own

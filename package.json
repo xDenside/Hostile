@@ -1,7 +1,7 @@
 {
   "name": "hostile",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "description": "Voice, screen sharing and text chat hosted from one person's own PC, with no rented server.",
   "type": "module",

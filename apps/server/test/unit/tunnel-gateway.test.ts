@@ -110,7 +110,7 @@ describe('the gateway under frames no honest guest sends', () => {
   const atOpen: [string, Uint8Array][] = [
     ['a subprotocol that is not a token', openWs(1, { protocols: ['bad proto'] })],
     ['the same subprotocol twice', openWs(1, { protocols: ['a', 'a'] })],
-    ['a line break in a header', openWs(1, { headers: { cookie: 'a=b\r\nX-Evil: 1' } })],
+    ['a line break in a header', openWs(1, { headers: { 'user-agent': 'a\r\nX-Evil: 1' } })],
   ];
   it.each(atOpen)('survives %s when opening a socket', async (_name, frame) => {
     const gateway = await startGateway(await startUpstream());
@@ -344,5 +344,82 @@ describe('what the gateway tells the servers behind it', () => {
     expect(seen.room!['x-forwarded-for']).toMatch(/^fd68:/);
     expect(seen.livekit![GATEWAY_TOKEN_HEADER]).toBeUndefined();
     expect(seen.livekit!['x-forwarded-for']).toMatch(/^fd68:/);
+  });
+});
+
+describe('the session cookie stays with the gateway', () => {
+  async function room(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void) {
+    const seen: http.IncomingHttpHeaders[] = [];
+    const server = http.createServer((req, res) => {
+      seen.push(req.headers);
+      handler(req, res);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    closers.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, seen };
+  }
+  const get = (id: number, path: string, headers: object = {}) =>
+    encodeJsonFrame(FRAME.OPEN_HTTP, id, {
+      target: 'room',
+      path,
+      method: 'GET',
+      headers,
+      hasBody: false,
+    });
+
+  it('keeps a Set-Cookie from the guest, sends it on, and ignores a cookie the guest names', async () => {
+    const upstream = await room((req, res) => {
+      if (req.url === '/api/join/t')
+        res.setHeader('Set-Cookie', 'hostile_session=secret; HttpOnly');
+      res.end('{}');
+    });
+    const gateway = await startGateway(upstream.url);
+    const guest = await connect(gateway.url);
+    guest.send(get(1, '/api/join/t'));
+    await waitForHead(guest, 1);
+    const head = guest.frames.find((f) => f.id === 1 && f.type === FRAME.HEAD)!;
+    expect(head.json).not.toContain('secret');
+    expect(head.json.toLowerCase()).not.toContain('set-cookie');
+    guest.send(get(3, '/api/auth/session', { cookie: 'hostile_session=stolen' }));
+    await waitForHead(guest, 3);
+    expect(upstream.seen[1]!.cookie).toBe('hostile_session=secret');
+    const other = await connect(gateway.url);
+    other.send(get(1, '/api/auth/session'));
+    await waitForHead(other, 1);
+    expect(upstream.seen[2]!.cookie).toBeUndefined();
+  });
+
+  it('refuses a call connection unless the link signed in as the person the call token names', async () => {
+    const upstream = await room((req, res) => {
+      if (req.url === '/api/join/t') res.setHeader('Set-Cookie', 'hostile_session=secret');
+      if (req.url === '/api/auth/session') {
+        res.statusCode = req.headers.cookie ? 200 : 401;
+        res.end(JSON.stringify({ user: { id: 'u1' } }));
+        return;
+      }
+      res.end('{}');
+    });
+    let calls = 0;
+    const livekit = await startUpstream(() => calls++);
+    const gateway = await startGateway(upstream.url, { livekitUrl: livekit });
+    const token = (sub: string) =>
+      `x.${Buffer.from(JSON.stringify({ sub })).toString('base64url')}.y`;
+    const rtc = (id: number, sub: string) =>
+      encodeJsonFrame(FRAME.OPEN_WS, id, {
+        target: 'livekit',
+        path: `/rtc?access_token=${token(sub)}`,
+        protocols: [],
+        headers: {},
+      });
+    const guest = await connect(gateway.url);
+    guest.send(rtc(1, 'u1'));
+    await expect.poll(() => guest.frames.find((f) => f.id === 1)?.type).toBe(FRAME.RESET);
+    guest.send(get(3, '/api/join/t'));
+    await waitForHead(guest, 3);
+    guest.send(rtc(5, 'u2'));
+    await expect.poll(() => guest.frames.find((f) => f.id === 5)?.type).toBe(FRAME.RESET);
+    expect(calls).toBe(0);
+    guest.send(rtc(7, 'u1'));
+    await expect.poll(() => calls).toBe(1);
   });
 });

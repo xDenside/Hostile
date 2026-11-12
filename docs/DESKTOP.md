@@ -276,7 +276,7 @@ for as long as it runs. The app has no unindexed text search, so its own queries
 **Your own window** talks straight to the server on 127.0.0.1. The policy allows that origin only while hosting, and only
 on those ports. Its session stays in the main process, encrypted with the OS keychain in `credentials.bin`. **A guest in the
 app** runs the same tunnel code as a browser tab, from `hostile://`, with its files through a Service Worker. Its identity
-is kept as a tab's is, in `localStorage` under the host's fingerprint, not in `credentials.bin`.
+is kept as a tab's is, a non-extractable key in IndexedDB under the host's fingerprint, not in `credentials.bin`.
 
 **The bridge window** has its session in `persist:hostile-bridge`, because the certificate guests know this host by lives
 in its IndexedDB, and background throttling off. Chromium hides a page's addresses behind mDNS names unless the page may

@@ -15,7 +15,6 @@ import {
   type TunnelHead,
   type TunnelTarget,
 } from '@hostile/shared';
-import type { CookieJar } from './cookie-jar';
 
 export type FrameSender = (frame: Uint8Array<ArrayBuffer>, bulk: boolean) => Promise<void>;
 
@@ -79,10 +78,7 @@ export class TunnelMux {
   private readonly streams = new Map<number, MuxStream>();
   private over: Error | null = null;
 
-  constructor(
-    private readonly send: FrameSender,
-    private readonly jar: CookieJar,
-  ) {}
+  constructor(private readonly send: FrameSender) {}
 
   private allocate(bulk: boolean, stream: MuxStream): number {
     if (this.streams.size >= TUNNEL_MAX_STREAMS - 2) throw failed('Too many requests at once.');
@@ -146,8 +142,7 @@ export class TunnelMux {
     const bulk = init.bulk === true;
     const headers: Record<string, string> = {};
     new Headers(init.headers ?? undefined).forEach((value, name) => (headers[name] = value));
-    const cookie = this.jar.header();
-    if (cookie) headers.cookie = cookie;
+    delete headers.cookie;
     headers['user-agent'] = navigator.userAgent;
     const hasBody = init.body !== undefined && init.body !== null;
 
@@ -175,12 +170,9 @@ export class TunnelMux {
         window: new SendWindow(),
         onHead: (head) => {
           const out = new Headers();
-          const cookies: string[] = [];
           for (const [name, value] of head.headers) {
-            if (name === 'set-cookie') cookies.push(value);
-            else out.append(name, value);
+            if (name !== 'set-cookie') out.append(name, value);
           }
-          if (cookies.length) this.jar.absorb(cookies);
           if (NULL_BODY.has(head.status) || init.method === 'HEAD') {
             resolve(new Response(null, { status: head.status, headers: out }));
             return;
@@ -314,7 +306,6 @@ export class TunnelMux {
       queueMicrotask(() => socket.handleFailure());
       return;
     }
-    const cookie = this.jar.header();
     socket.bind({
       sendMessage: async (bytes, binary) => {
         for (let at = 0; at === 0 || at < bytes.length; at += TUNNEL_MAX_CHUNK) {
@@ -333,7 +324,6 @@ export class TunnelMux {
         path,
         protocols,
         headers: {
-          ...(cookie ? { cookie } : {}),
           'user-agent': navigator.userAgent,
         },
       }),

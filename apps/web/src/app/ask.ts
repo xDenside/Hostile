@@ -6,6 +6,7 @@ import { useSession } from '../stores/session';
 import { toast } from '../stores/ui';
 import { useTunnel } from '../tunnel/state';
 import { enterApp } from './session';
+import { currentDeviceKey } from '../tunnel/device-key';
 
 const LOOK_EVERY_MS = 2_000;
 const WAIT_LIMIT_MS = 30 * 60_000;
@@ -113,7 +114,7 @@ async function look() {
 async function send(startedAt: number) {
   const { nickname, avatar } = useAsk.getState();
   try {
-    const answer = await endpoints.join.ask(nickname, !!avatar);
+    const answer = await endpoints.join.ask(nickname, !!avatar, currentDeviceKey());
     if ('status' in answer) return await enter(answer, false);
     const kept: Kept = { ticket: answer.ticket, nickname, startedAt };
     current = kept;

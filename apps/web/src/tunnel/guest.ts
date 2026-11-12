@@ -9,7 +9,7 @@ import {
   TUNNEL_PROTOCOL,
 } from '@hostile/shared';
 import type { JoinRoomConfig, Room } from 'trystero/nostr';
-import { CookieJar } from './cookie-jar';
+import { deviceKeyFor, forgetDeviceKey } from './device-key';
 import { registerFileWorker } from './file-worker';
 import { TunnelMux, type FrameSender } from './mux';
 import { installLivekitShims, setTunnelNet } from './net';
@@ -89,7 +89,7 @@ let room: Room | null = null;
 let link: HostLink | null = null;
 let hostKey: string | null = null;
 let attempt = 0;
-let jar: CookieJar | null = null;
+let identity: string | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let knockTimer: ReturnType<typeof setInterval> | null = null;
 let upListeners: (() => void)[] = [];
@@ -149,17 +149,69 @@ function detach(reason: string) {
   } catch {}
 }
 
+function legacyToken(name: string): string | null {
+  try {
+    const cookies = JSON.parse(localStorage.getItem(name) ?? '{}') as Record<
+      string,
+      { value?: string }
+    >;
+    const found = Object.entries(cookies).find(([key]) => key.endsWith('_session'));
+    return found?.[1].value || null;
+  } catch {
+    return null;
+  }
+}
+
+async function endIdentityOf(name: string) {
+  localStorage.removeItem(name);
+  await forgetDeviceKey(name).catch(() => undefined);
+}
+
+async function signInOverLink(mux: TunnelMux, name: string) {
+  let key;
+  try {
+    key = await deviceKeyFor(name);
+  } catch {
+    return;
+  }
+  const post = (path: string, body: unknown) =>
+    mux
+      .fetch('room', path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      .catch(() => null);
+  const legacy = legacyToken(name);
+  if (legacy) {
+    const claimed = await post('/api/auth/device/claim', {
+      token: legacy,
+      deviceKey: key.publicKey,
+    });
+    if (claimed && claimed.status < 500 && claimed.status !== 429) localStorage.removeItem(name);
+    if (claimed?.ok) return;
+  }
+  const issued = await post('/api/auth/device/challenge', {});
+  if (!issued?.ok) return;
+  const { challenge } = (await issued.json()) as { challenge: string };
+  await post('/api/auth/device/sign-in', {
+    deviceKey: key.publicKey,
+    challenge,
+    signature: await key.sign(challenge),
+  });
+}
+
 async function attachHost(pc: RTCPeerConnection, mine: number): Promise<void> {
   const fingerprint = fingerprintOf(pc);
   if (!fingerprint || !isKnownHost(pc)) throw new StepFailure('greeting', NOT_THE_HOST);
-  jar = new CookieJar(JAR_PREFIX + fingerprint);
+  identity = JAR_PREFIX + fingerprint;
   const channels = openChannels(pc);
   const writers = {
     control: new ChannelWriter(channels.control),
     bulk: new ChannelWriter(channels.bulk),
   };
   const send: FrameSender = (frame, bulk) => (bulk ? writers.bulk : writers.control).write(frame);
-  const mux = new TunnelMux(send, jar!);
+  const mux = new TunnelMux(send);
   const candidate: HostLink = { pc, mux, writers, lastHeard: Date.now(), timer: 0 as never };
 
   await new Promise<void>((resolve, reject) => {
@@ -201,6 +253,8 @@ async function attachHost(pc: RTCPeerConnection, mine: number): Promise<void> {
     channels.control.onmessage = onFrame;
     channels.bulk.onmessage = onFrame;
   });
+  if (mine !== attempt) return;
+  await signInOverLink(mux, identity!);
   if (mine !== attempt) return;
 
   detach('The host changed.');
@@ -252,7 +306,7 @@ function hostEnded(reason: string) {
   stopKnocking();
   room?.leave().catch(() => undefined);
   room = null;
-  if (reason === 'account_disabled') jar?.clear();
+  if (reason === 'account_disabled' && identity) void endIdentityOf(identity);
   useTunnel.setState({
     phase: 'ended',
     step: null,
@@ -470,8 +524,8 @@ export function forgetRoom({ endIdentity = false }: { endIdentity?: boolean } = 
   detach('Left the room.');
   room?.leave().catch(() => undefined);
   room = null;
-  if (endIdentity) jar?.clear();
-  jar = null;
+  if (endIdentity && identity) void endIdentityOf(identity);
+  identity = null;
   if (hostKey) localStorage.removeItem(hostKey);
   hostKey = null;
   localStorage.removeItem(CODE_KEY);

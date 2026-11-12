@@ -32,8 +32,9 @@ read it" — describe it as "one of us hosts it, so only we can read it".
 
 - A session is an opaque token that does not expire and is not rotated, because nothing could replace it: losing it
   loses the person. So an answer lost on its way costs one retry, and there is no reuse detection to trip.
-- A guest's session is a cookie the page keeps in `localStorage`, in a tab and in the app alike, and script in that page
-  can read it. See "A person is their device" in [DESIGN.md](DESIGN.md). Unsafe requests additionally require an
+- A guest's session cookie is kept by the gateway, one jar per connection, never by the page. The device keeps a
+  non-extractable signing key in IndexedDB and signs a one-use challenge on each connection. See "A person is their
+  device" in [DESIGN.md](DESIGN.md). Unsafe requests additionally require an
   `X-CSRF-Token` header (HMAC of the session id) and a recognized `Origin`. Credentialed cross-origin CORS is never enabled.
 - The owner's session stays in the Electron main process, encrypted with the OS keychain (`safeStorage`); the owner's
   window holds only a short-lived access token in memory.
@@ -48,7 +49,10 @@ read it" — describe it as "one of us hosts it, so only we can read it".
   that build outputs contain no secrets). The hosted room's server bundle, `apps/desktop/dist/host`, may name the
   server's variables, as any server does. Real values and key blocks are still looked for in it.
 - Who is in a room comes from LiveKit, not from client claims.
-- **Residual access after removing a person**: LiveKit 1.13 has no token revocation and re-issues
+- **Removing a person from a call in a hosted room is immediate.** The gateway opens a LiveKit connection only for a
+  guest connection signed in as the person the call token names, and removal ends the session and the tunnel. The
+  paragraph below applies only to a server run on its own, where clients reach LiveKit directly.
+- **Residual access after removing a person** (server run on its own): LiveKit 1.13 has no token revocation and re-issues
   tokens to connected participants roughly every five minutes with at least ten minutes of validity.
   Removing a participant does not invalidate the token they already hold. The API therefore re-checks
   authorization on every `participant_joined` webhook and on every reconciliation pass (every 15
@@ -135,8 +139,8 @@ Make a new code. Anyone with the old one can then reach nothing.
 
 ## Guests through the tunnel
 
-A guest's session cookie and room code live in `localStorage`, readable by script in the page, and one code serves the
-whole room. See "A person is their device" and "The tunnel" in [DESIGN.md](DESIGN.md) for what that gives up and what the gateway enforces.
+A guest's room code lives in `localStorage`, its session cookie lives in the gateway's jar for that connection, and its
+identity is a non-extractable key in IndexedDB. One code serves the whole room. See "A person is their device" and "The tunnel" in [DESIGN.md](DESIGN.md) for what that gives up and what the gateway enforces.
 
 The code names the host's signing key, which lives in `host/secrets.json` beside the other secrets and reaches only the
 bridge window, in the part of its address after `#`, which the page removes at once. A guest believes only messages on the

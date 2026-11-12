@@ -5,6 +5,8 @@ import { useTunnel } from '../../tunnel/state';
 import { leaveRoom } from '../../app/session';
 import { JoinRequestRow, useJoinRequests } from '../join/JoinRequests';
 import { toast } from '../../stores/ui';
+import { endpoints, errorMessage } from '../../api/client';
+import { Switch } from '../../components/ui';
 import { CodeReveal, ConfirmButton, Group } from './Group';
 import styles from './settings.module.scss';
 
@@ -57,6 +59,45 @@ function partWords(part: HostingPart) {
   return `${WORDS[part.state]}${restarted}`;
 }
 
+function ClosedDoor() {
+  const [closed, setClosed] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    endpoints.admin
+      .joinClosed()
+      .then((r) => alive && setClosed(r.closed))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (closed === null) return null;
+  return (
+    <Switch
+      label="Turn away everyone who asks"
+      description={
+        closed
+          ? 'On. Nobody new can ask to join, and the people already in come back as always. Turn it off when you want to let someone new in.'
+          : 'For when everyone is in. New asks are refused at once, and nobody waits.'
+      }
+      checked={closed}
+      disabled={saving}
+      testId="join-closed"
+      onChange={async (next) => {
+        setSaving(true);
+        try {
+          setClosed((await endpoints.admin.setJoinClosed(next)).closed);
+        } catch (err) {
+          toast(errorMessage(err));
+        } finally {
+          setSaving(false);
+        }
+      }}
+    />
+  );
+}
+
 function Hosting() {
   const bridge = platform().desktop!;
   const status = useHostingStatus();
@@ -81,6 +122,7 @@ function Hosting() {
         )}
       </Group>
       <Group title="Waiting to join">
+        <ClosedDoor />
         {waiting.length ? (
           waiting.map((request) => <JoinRequestRow key={request.id} request={request} />)
         ) : (

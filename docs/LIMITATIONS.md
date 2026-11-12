@@ -12,8 +12,8 @@ host-on-your-PC design has not built or proved yet.
 - **A person is their device.** A new device or cleared browser data makes a new person, whose old messages keep the old
   name and picture. There is no recovery, linking or export. The host's key lasts a year, the limit browsers set, so at that
   rollover everyone asks again as someone new.
-- **A copied device identity is that person** until the host removes them. For a guest it sits in `localStorage`, in the
-  app as well as in a tab, and script in that page can read it.
+- **A copied browser profile is that person** until the host removes them. A guest's identity is a non-extractable key in
+  IndexedDB, which page scripts cannot read out, but a copy of the whole profile on disk carries it.
 - **Anyone holding the code learns the host's address** from the relays, for as long as the code lives, and sees when
   someone joins. A guest's own connection details are sealed for the host alone, and a host someone stands up on the code
   without the host's signing key gets nothing from a guest, on a first visit too.
@@ -22,7 +22,7 @@ host-on-your-PC design has not built or proved yet.
   at once, one per connection, and someone reconnecting with the code can hold those places until each lapses, 90 seconds
   after it stops looking. Changing the code stops them.
 - **Safari may forget a guest in a tab.** WebKit is documented as clearing a site's script-writable storage after seven days
-  of Safari use without a visit to it, and a tab guest's identity is in `localStorage`, so they would ask again as someone
+  of Safari use without a visit to it, and a tab guest's identity is in its storage, so they would ask again as someone
   new. This was not tested, because it cannot be run here. The page asks for persistent storage where the browser offers it,
   and whether that exempts Safari is not known. Friends on Safari keep their identity for certain only in the app.
 - **Let in on someone who has already gone makes a member nobody uses.** A request stays on the list for up to 90 seconds
@@ -358,8 +358,8 @@ What a person sees when strong does not run:
   before a call connects, because a browser without that permission offers the call only a made-up
   `.local` name instead of its real address. On a network where those names do not resolve, a guest
   who refuses cannot join voice at all through a host on the same machine or network.
-- **Media tokens cannot be revoked** in LiveKit 1.13; see [SECURITY.md](SECURITY.md#media-authorization)
-  for the exact residual window and the mitigation.
+- **Media tokens cannot be revoked** in LiveKit 1.13. In a hosted room the gateway refuses a removed person's call
+  connection, so this matters only for a server run on its own; see [SECURITY.md](SECURITY.md#media-authorization).
 - **Two windows of the same person** cannot both be in the same voice room. The newest window wins
   and the older one is told why.
 

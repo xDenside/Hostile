@@ -27,6 +27,7 @@ interface Pending {
   nickname: string;
   address: string;
   userAgent: string | undefined;
+  deviceKey: string | undefined;
   picture: JoinPicture | null;
   pictureKey: string;
   picturePromised: boolean;
@@ -44,6 +45,7 @@ export class JoinRequests {
   readonly events = new EventEmitter<JoinRequestEvents>();
   private readonly byTicket = new Map<string, Pending>();
   private sweeper: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -58,7 +60,14 @@ export class JoinRequests {
     this.byTicket.clear();
   }
 
-  ask(input: { nickname: string; address: string; userAgent?: string; picture: boolean }) {
+  ask(input: {
+    nickname: string;
+    address: string;
+    userAgent?: string;
+    deviceKey?: string;
+    picture: boolean;
+  }) {
+    if (this.closed) throw errors.joinClosed();
     this.sweep();
     for (const other of this.byTicket.values()) {
       if (other.address === input.address && other.answer.kind === 'waiting')
@@ -73,6 +82,7 @@ export class JoinRequests {
       nickname: input.nickname,
       address: input.address,
       userAgent: input.userAgent,
+      deviceKey: input.deviceKey,
       picture: null,
       pictureKey: randomUUID(),
       picturePromised: input.picture,
@@ -145,9 +155,25 @@ export class JoinRequests {
     throw errors.notFound('Request');
   }
 
+  get isClosed() {
+    return this.closed;
+  }
+
+  setClosed(closed: boolean) {
+    this.closed = closed;
+    if (!closed) return;
+    const now = this.now();
+    for (const request of this.byTicket.values()) {
+      if (request.answer.kind !== 'waiting') continue;
+      request.picture = null;
+      request.answer = { kind: 'turned-away', at: now };
+    }
+    this.events.emit('changed');
+  }
+
   claim(id: string) {
-    const { nickname, picture, userAgent } = this.waitingById(id);
-    return { nickname, picture, userAgent };
+    const { nickname, picture, userAgent, deviceKey } = this.waitingById(id);
+    return { nickname, picture, userAgent, deviceKey };
   }
 
   admitted(id: string, result: { token: string; sessionId: string; userId: string }) {

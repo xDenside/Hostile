@@ -5,7 +5,7 @@ import { ChatService } from '../../chat/service.js';
 import { toSelfUser, toUserPublic } from '../../lib/mappers.js';
 import { requireAuth } from '../middleware.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.1.1';
 
 const HEALTH_CACHE_MS = 5_000;
 

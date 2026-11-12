@@ -28,6 +28,8 @@ export async function startServer(
   ctx.joinRequests.events.on('changed', () =>
     ctx.realtime.toOwner('join:requests', { requests: ctx.joinRequests.list() }),
   );
+  const settings = await db.roomSettings.findUnique({ where: { id: 1 } });
+  ctx.joinRequests.setClosed(settings?.joinRequestsClosed ?? false);
   ctx.joinRequests.start();
   enforceRequestDeadlines(server);
 

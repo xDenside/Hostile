@@ -79,6 +79,7 @@ model Session {
   revokedAt    DateTime?  @db.Timestamptz(3)
   revokeReason String?
   userAgent    String?
+  deviceKey    String?    @unique
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -175,4 +176,12 @@ model ReadState {
   @@id([userId, channelId])
   @@index([channelId])
   @@map("read_states")
+}
+
+model RoomSettings {
+  id                 Int      @id @default(1)
+  joinRequestsClosed Boolean  @default(false)
+  updatedAt          DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("room_settings")
 }

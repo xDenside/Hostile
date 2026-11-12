@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createFirstOwner } from '../../src/auth/first-owner.js';
 import { loadConfig } from '../../src/config.js';
@@ -250,5 +251,121 @@ describe('a hosted room believes only its gateway', () => {
       ),
     ).toThrowError(/JOIN_AUTO_ADMIT/);
     expect(GATEWAY_TOKEN_HEADER).toBe('x-hostile-gateway-token');
+  });
+});
+
+describe('a guest whose device holds the key', () => {
+  const device = () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    return {
+      key: publicKey.export({ format: 'der', type: 'spki' }).toString('base64url'),
+      sign: (text: string) =>
+        sign('sha256', Buffer.from(text), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString(
+          'base64url',
+        ),
+    };
+  };
+  async function admit(deviceKey?: string) {
+    const owner = await ownerSession();
+    const asked = await api.http().post('/api/join').send({ nickname: 'Sam', deviceKey });
+    const { ticket } = asked.body as { ticket: string };
+    const list = await api
+      .http()
+      .get('/api/admin/join-requests')
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+    await api
+      .http()
+      .post(`/api/admin/join-requests/${list.body.requests[0].id as string}/let-in`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({});
+    const status = await api.http().get(`/api/join/${ticket}`);
+    return { owner, cookie: sessionCookie(status.headers['set-cookie'] as unknown as string[]) };
+  }
+  async function signIn(d: ReturnType<typeof device>, tamper = false) {
+    const { challenge } = (await api.http().post('/api/auth/device/challenge').send({})).body as {
+      challenge: string;
+    };
+    return api
+      .http()
+      .post('/api/auth/device/sign-in')
+      .send({
+        deviceKey: d.key,
+        challenge,
+        signature: d.sign(tamper ? `${challenge}x` : challenge),
+      });
+  }
+
+  it('signs back in with a fresh challenge, gets the same cookie, and nothing else does', async () => {
+    const d = device();
+    const { cookie } = await admit(d.key);
+    const back = await signIn(d);
+    expect(back.status).toBe(200);
+    expect(sessionCookie(back.headers['set-cookie'] as unknown as string[])).toBe(cookie);
+    expect((await signIn(d, true)).status).toBe(401);
+    expect((await signIn(device())).status).toBe(401);
+    const { challenge } = (await api.http().post('/api/auth/device/challenge').send({})).body as {
+      challenge: string;
+    };
+    const once = { deviceKey: d.key, challenge, signature: d.sign(challenge) };
+    expect((await api.http().post('/api/auth/device/sign-in').send(once)).status).toBe(200);
+    expect((await api.http().post('/api/auth/device/sign-in').send(once)).status).toBe(401);
+  });
+
+  it('cannot sign in once the host removes the person', async () => {
+    const d = device();
+    const { owner } = await admit(d.key);
+    const user = await api.ctx.db.user.findFirstOrThrow({ where: { role: 'MEMBER' } });
+    await api
+      .http()
+      .post(`/api/admin/users/${user.id}/remove`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({});
+    expect((await signIn(d)).status).not.toBe(200);
+  });
+
+  it('moves an old stored token onto the key, and in a hosted room the old token stops working', async () => {
+    const { cookie } = await admit();
+    const legacy = cookie.split('=')[1]!;
+    const d = device();
+    const config = api.ctx.config as { isProduction: boolean };
+    config.isProduction = true;
+    try {
+      const claimed = await api
+        .http()
+        .post('/api/auth/device/claim')
+        .send({ token: legacy, deviceKey: d.key });
+      expect(claimed.status).toBe(200);
+    } finally {
+      config.isProduction = false;
+    }
+    expect((await api.http().get('/api/auth/session').set('Cookie', cookie)).status).toBe(401);
+    expect((await signIn(d)).status).toBe(200);
+  });
+});
+
+describe('turning away everyone who asks', () => {
+  it('refuses new asks while on, turns away who waits, keeps members in, and lasts until turned off', async () => {
+    const owner = await ownerSession();
+    const auth = { Authorization: `Bearer ${owner.accessToken}` };
+    const waiting = await ask('Early');
+    const { ticket } = waiting.body as { ticket: string };
+    const member = await createUser(api.ctx);
+    const memberSession = await api.ctx.sessions.create(member, 'WEB', undefined);
+    const on = await api
+      .http()
+      .put('/api/admin/join-requests/closed')
+      .set(auth)
+      .send({ closed: true });
+    expect(on.body).toEqual({ closed: true });
+    expect((await api.http().get(`/api/join/${ticket}`)).body).toEqual({ status: 'turned-away' });
+    const refused = await ask('Late');
+    expect(refused.status).toBe(403);
+    expect(refused.body.error.code).toBe('join_closed');
+    expect((await api.ctx.sessions.findByToken(memberSession.token))?.userId).toBe(member.id);
+    expect(
+      (await api.ctx.db.roomSettings.findUniqueOrThrow({ where: { id: 1 } })).joinRequestsClosed,
+    ).toBe(true);
+    await api.http().put('/api/admin/join-requests/closed').set(auth).send({ closed: false });
+    expect((await ask('Later')).status).toBe(201);
   });
 });

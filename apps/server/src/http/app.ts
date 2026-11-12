@@ -14,6 +14,7 @@ import { precompressedFiles } from './precompressed.js';
 import { attachmentFileRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { chatRoutes } from './routes/chat.js';
+import { deviceRoutes } from './routes/device.js';
 import { joinPictureRoutes, joinRoutes } from './routes/join.js';
 import { mediaRoutes } from './routes/media.js';
 import { metaRoutes } from './routes/meta.js';
@@ -96,6 +97,7 @@ export function createApp(ctx: AppContext): Express {
   });
 
   app.use('/api', metaRoutes(ctx));
+  app.use('/api/auth/device', deviceRoutes(ctx));
   app.use('/api/auth', authRoutes(ctx));
   app.use('/api/join', joinRoutes(ctx));
   app.use('/api', chatRoutes(ctx));

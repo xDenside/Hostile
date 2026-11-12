@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import {
   createChannelRequestSchema,
   idSchema,
@@ -18,6 +19,19 @@ export function adminRoutes(ctx: AppContext): Router {
 
   router.get('/join-requests', (_req, res) => {
     res.json({ requests: ctx.joinRequests.list() });
+  });
+  router.get('/join-requests/closed', (_req, res) => {
+    res.json({ closed: ctx.joinRequests.isClosed });
+  });
+  router.put('/join-requests/closed', async (req, res) => {
+    const { closed } = parseBody(z.strictObject({ closed: z.boolean() }), req.body);
+    await ctx.db.roomSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, joinRequestsClosed: closed },
+      update: { joinRequestsClosed: closed },
+    });
+    ctx.joinRequests.setClosed(closed);
+    res.json({ closed });
   });
   router.post('/join-requests/:id/let-in', async (req, res) => {
     await letIn(ctx, id(req.params.id));

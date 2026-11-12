@@ -281,9 +281,12 @@ test.describe('tunnel protections', () => {
     await joinAndSignIn(owner, host.code, USERS.alice);
     const nickname = `Removable ${Date.now().toString().slice(-6)}`;
     await joinAndAsk(member, host.code, nickname);
-    const stored = await member.evaluate(
-      () => Object.entries(localStorage).find(([k]) => k.includes('tunnel:jar'))?.[1] ?? '',
+    const stored = await member.evaluate(() =>
+      Object.entries(localStorage)
+        .filter(([, value]) => value.includes('_session'))
+        .map(([key]) => key),
     );
+    expect(stored, 'no session token is kept where page scripts can read it').toEqual([]);
     const guestsBefore = host.gateway.guests();
 
     const removed = await owner.evaluate(async (nickname) => {
@@ -311,16 +314,13 @@ test.describe('tunnel protections', () => {
       await comeBack(member);
       await expect(member.getByTestId('connection-state')).toHaveCount(0);
 
-      const cookie = Object.entries(JSON.parse(stored) as Record<string, { value: string }>)
-        .map(([name, c]) => `${name}=${c.value}`)
-        .join('; ');
       const replay = await rawExchange(
         member,
         encodeJsonFrame(FRAME.OPEN_HTTP, 5000, {
           target: 'room',
           path: '/api/bootstrap',
           method: 'GET',
-          headers: { cookie },
+          headers: {},
           hasBody: false,
         }),
       );

@@ -38,6 +38,12 @@ export const errors = {
     new HttpError(429, ErrorCode.JoinQueueFull, 'Too many people are waiting. Try again shortly.', {
       retryAfterSec: 15,
     }),
+  joinClosed: () =>
+    new HttpError(
+      403,
+      ErrorCode.JoinClosed,
+      'This room is not taking new people right now. Ask the host if you should be let in.',
+    ),
   payloadTooLarge: (message: string) => new HttpError(413, ErrorCode.PayloadTooLarge, message),
   invalidImage: (status: 400 | 415, message: string) =>
     new HttpError(status, ErrorCode.Validation, message),

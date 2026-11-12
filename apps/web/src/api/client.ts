@@ -242,8 +242,12 @@ export const endpoints = {
   leave: () => api<void>('POST', '/api/auth/leave', {}),
 
   join: {
-    ask: (nickname: string, picture: boolean) =>
-      api<JoinAskResponse>('POST', '/api/join', { nickname, picture }),
+    ask: (nickname: string, picture: boolean, deviceKey: string | null) =>
+      api<JoinAskResponse>('POST', '/api/join', {
+        nickname,
+        picture,
+        ...(deviceKey ? { deviceKey } : {}),
+      }),
     picture: (ticket: string, file: Blob) => upload<void>(`/api/join/${enc(ticket)}/picture`, file),
     status: (ticket: string) => api<JoinStatus>('GET', `/api/join/${enc(ticket)}`),
     cancel: (ticket: string) => api<void>('DELETE', `/api/join/${enc(ticket)}`),
@@ -254,6 +258,9 @@ export const endpoints = {
     letIn: (id: string) => api<void>('POST', `/api/admin/join-requests/${enc(id)}/let-in`, {}),
     turnAway: (id: string) =>
       api<void>('POST', `/api/admin/join-requests/${enc(id)}/turn-away`, {}),
+    joinClosed: () => api<{ closed: boolean }>('GET', '/api/admin/join-requests/closed'),
+    setJoinClosed: (closed: boolean) =>
+      api<{ closed: boolean }>('PUT', '/api/admin/join-requests/closed', { closed }),
     users: () => api<{ users: AdminUserDTO[] }>('GET', '/api/admin/users'),
     removeUser: (id: string) =>
       api<{ user: UserPublic }>('POST', `/api/admin/users/${enc(id)}/remove`, {}),

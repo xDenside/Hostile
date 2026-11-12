@@ -10,6 +10,7 @@ export const ErrorCode = {
   Csrf: 'csrf_failed',
   OriginNotAllowed: 'origin_not_allowed',
   JoinQueueFull: 'join_queue_full',
+  JoinClosed: 'join_closed',
   PayloadTooLarge: 'payload_too_large',
   MediaUnavailable: 'media_unavailable',
   UploadsUnavailable: 'uploads_unavailable',

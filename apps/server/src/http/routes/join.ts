@@ -3,6 +3,7 @@ import express, { Router, type Request, type RequestHandler, type Response } fro
 import { stringifySetCookie } from 'cookie';
 import { joinAskSchema, type JoinAskResponse, type JoinStatus } from '@hostile/shared';
 import { csrfTokenFor } from '../../auth/access-token.js';
+import { bindDevice, isDeviceKey } from '../../auth/device.js';
 import { defaultAvatarColor } from '../../auth/service.js';
 import type { AppContext } from '../../context.js';
 import type { Session, User } from '../../generated/prisma/client.js';
@@ -47,13 +48,17 @@ const vouchedFor =
   };
 
 export async function letIn(ctx: AppContext, requestId: string) {
-  const { nickname, picture, userAgent } = ctx.joinRequests.claim(requestId);
+  const { nickname, picture, userAgent, deviceKey } = ctx.joinRequests.claim(requestId);
   const id = randomUUID();
   let user = await ctx.db.user.create({
     data: { id, displayName: nickname, avatarColor: defaultAvatarColor(id), role: 'MEMBER' },
   });
   if (picture) user = await setProfileImage(ctx.db, ctx.log, id, 'avatar', picture.bytes);
-  const { session, token } = await ctx.sessions.create(user, 'WEB', userAgent);
+  const created = await ctx.sessions.create(user, 'WEB', userAgent);
+  const { session } = created;
+  const token = deviceKey
+    ? await bindDevice(ctx.db, ctx.config.sessionSecret, session.id, deviceKey)
+    : created.token;
   ctx.joinRequests.admitted(requestId, { token, sessionId: session.id, userId: id });
   ctx.log.info({ userId: id }, 'let in');
   ctx.realtime.toCommunity('member:upserted', toUserPublic(user));
@@ -87,6 +92,7 @@ export function joinRoutes(ctx: AppContext): Router {
       nickname: body.nickname,
       address,
       picture: body.picture === true && !ctx.config.joinAutoAdmit,
+      ...(body.deviceKey && isDeviceKey(body.deviceKey) ? { deviceKey: body.deviceKey } : {}),
       ...(userAgent ? { userAgent } : {}),
     });
     if (ctx.config.joinAutoAdmit) {

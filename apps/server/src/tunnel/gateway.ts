@@ -52,7 +52,6 @@ const ALLOWED_REQUEST_HEADERS = new Set([
   'accept-language',
   'authorization',
   'content-type',
-  'cookie',
   'if-modified-since',
   'if-none-match',
   'if-range',
@@ -140,8 +139,38 @@ interface Stream {
   destroy(): void;
 }
 
+const COOKIES_PER_LINK = 8;
+
+class LinkCookies {
+  private readonly cookies = new Map<string, string>();
+
+  header(): string | null {
+    if (!this.cookies.size) return null;
+    return [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
+  }
+
+  absorb(line: string) {
+    const [pair, ...attributes] = line.split(';');
+    const eq = pair!.indexOf('=');
+    if (eq <= 0) return;
+    const name = pair!.slice(0, eq).trim();
+    const value = pair!.slice(eq + 1).trim();
+    const expired = attributes.some((attribute) => {
+      const [key, given] = attribute.split('=');
+      const k = key!.trim().toLowerCase();
+      if (k === 'max-age') return Number(given) <= 0;
+      if (k === 'expires') return Date.parse(given ?? '') <= Date.now();
+      return false;
+    });
+    if (!value || expired) this.cookies.delete(name);
+    else if (this.cookies.has(name) || this.cookies.size < COOKIES_PER_LINK)
+      this.cookies.set(name, value);
+  }
+}
+
 class GuestLink {
   readonly address = guestAddress();
+  private readonly cookies = new LinkCookies();
   private readonly streams = new Map<number, Stream>();
   private lastSeen = Date.now();
   private readonly joinedAt = Date.now();
@@ -266,12 +295,14 @@ class GuestLink {
   }
 
   private headersFor(target: TunnelTarget, given: unknown): Record<string, string> {
+    const cookie = target === 'room' ? this.cookies.header() : null;
     return {
       ...allowedHeaders(given),
       'x-forwarded-for': this.address,
       ...(target === 'room'
         ? { origin: this.options.origin, [GATEWAY_TOKEN_HEADER]: this.options.roomToken }
         : {}),
+      ...(cookie ? { cookie } : {}),
     };
   }
 
@@ -359,7 +390,9 @@ class GuestLink {
       const headers: [string, string][] = [];
       for (let i = 0; i < res.rawHeaders.length; i += 2) {
         const name = res.rawHeaders[i]!.toLowerCase();
-        if (!HOP_BY_HOP.has(name)) headers.push([name, res.rawHeaders[i + 1]!]);
+        if (name === 'set-cookie') {
+          if (route.target === 'room') this.cookies.absorb(res.rawHeaders[i + 1]!);
+        } else if (!HOP_BY_HOP.has(name)) headers.push([name, res.rawHeaders[i + 1]!]);
       }
       const head: TunnelHead = { status: res.statusCode ?? 502, headers };
       this.send(encodeJsonFrame(FRAME.HEAD, id, head));
@@ -381,6 +414,68 @@ class GuestLink {
     const route = checkTunnelRoute('ws', open?.target, open?.path);
     if (!open || !route.ok)
       return this.reset(id, 'refused', route.ok ? 'bad request' : route.reason);
+    if (route.target !== 'livekit') return this.connectWs(id, open, route);
+    void this.mayJoinCall(route.path).then((allowed) => {
+      if (this.over) return;
+      if (!allowed) return this.reset(id, 'refused', 'not allowed in this call');
+      this.connectWs(id, open, route);
+    });
+  }
+
+  private mayJoinCall(path: string): Promise<boolean> {
+    let identity: unknown;
+    try {
+      const token = new URL(path, 'http://livekit.invalid').searchParams.get('access_token') ?? '';
+      identity = JSON.parse(
+        Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
+      ).sub;
+    } catch {
+      return Promise.resolve(false);
+    }
+    if (typeof identity !== 'string' || !this.cookies.header()) return Promise.resolve(false);
+    const room = new URL(this.options.roomUrl);
+    return new Promise((resolve) => {
+      const request = http.request(
+        {
+          host: room.hostname,
+          port: room.port,
+          method: 'GET',
+          path: '/api/auth/session',
+          headers: this.headersFor('room', {}),
+          agent: false,
+          timeout: 5_000,
+        },
+        (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            if (body.length < 64 * 1024) body += chunk;
+          });
+          res.on('end', () => {
+            try {
+              const user = (JSON.parse(body) as { user?: { id?: unknown } }).user;
+              resolve(res.statusCode === 200 && user?.id === identity);
+            } catch {
+              resolve(false);
+            }
+          });
+          res.on('error', () => resolve(false));
+        },
+      );
+      request.on('error', () => resolve(false));
+      request.on('timeout', () => {
+        request.destroy();
+        resolve(false);
+      });
+      request.end();
+    });
+  }
+
+  private connectWs(
+    id: number,
+    open: TunnelOpenWs,
+    route: Extract<ReturnType<typeof checkTunnelRoute>, { ok: true }>,
+  ) {
     const base = this.upstream(route.target);
     if (!base) return this.reset(id, 'refused', 'target not available');
     const url = base.replace(/^http/, 'ws') + route.path;

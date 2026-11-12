@@ -91,13 +91,17 @@ export const requireOwner: RequestHandler = (req, _res, next) => {
 };
 
 const CSRF_EXEMPT_PATHS = new Set(['/auth/owner', '/join']);
-const CSRF_EXEMPT_PREFIX = '/join/';
+const CSRF_EXEMPT_PREFIXES = ['/join/', '/auth/device/'];
 
 export function csrfProtection(ctx: AppContext): RequestHandler {
   return (req, _res, next) => {
     if (!UNSAFE_METHODS.has(req.method) || req.auth?.via !== 'cookie') return next();
     const path = req.path.toLowerCase().replace(/\/+$/, '');
-    if (CSRF_EXEMPT_PATHS.has(path) || path.startsWith(CSRF_EXEMPT_PREFIX)) return next();
+    if (
+      CSRF_EXEMPT_PATHS.has(path) ||
+      CSRF_EXEMPT_PREFIXES.some((prefix) => path.startsWith(prefix))
+    )
+      return next();
     const presented = req.get('x-csrf-token') ?? '';
     const expected = csrfTokenFor(ctx.config.sessionSecret, req.auth.session.id);
     if (!presented || !safeEqual(presented, expected)) return next(errors.csrf());

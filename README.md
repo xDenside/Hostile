@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="#status">Early preview 0.1.0, runs from source for now</a> · <a href="LICENSE">Apache-2.0</a> · <a href="#run-from-source">Run from source</a> · <a href="docs/DESIGN.md">Design</a>
+  <a href="https://github.com/xDenside/Hostile/releases/latest">Early preview 0.1.1, Mac download in Releases</a> · <a href="LICENSE">Apache-2.0</a> · <a href="#run-from-source">Run from source</a> · <a href="docs/DESIGN.md">Design</a>
 </p>
 
 ![The Hostile window: a channel list on the left, a conversation in #general in the middle, and who is online on the right](docs/images/chat.png)
@@ -69,6 +69,8 @@ That is the whole sign-up. There are no accounts, passwords or emails anywhere.
 
 - **A Hosting tab.** It shows the code, the waiting list, who is connected and the state of each part in plain words.
   Make a new code and the old one stops working, cutting everyone off until they paste the new one. Or stop hosting.
+- **Closed to new people.** Once everyone is in, one switch turns away every new ask at once, so nobody can fill the
+  waiting list. People already in come back as always, after a restart of the host too. It stays on until you turn it off.
 - **Requests that stay out of the way.** A small card that takes no focus, and a system notification with the
   person's name when the window is closed or in the background.
 - **Members and channels.** Remove someone and their sessions, calls and media end at once; their messages stay.
@@ -118,7 +120,8 @@ is React and TypeScript, the same code in the desktop app (Electron) and in a br
 
 ## Status
 
-Hostile is an early preview, version 0.1.0. The app is built and tested, but there is nothing to install yet.
+Hostile is an early preview, version 0.1.1. An Apple Silicon Mac build is attached to each release on the
+[Releases](https://github.com/xDenside/Hostile/releases) page.
 
 **Working today**
 
@@ -126,21 +129,21 @@ Hostile is an early preview, version 0.1.0. The app is built and tested, but the
 - Hosting from the desktop app: Host a room, Join with a code, Ask to join and Let in, with no login.
 - Joining with a code: finding the host through the relays, and the tunnel that connects each guest to the host for
   chat, files, calls and screen shares.
-- An Apple Silicon macOS package with the media server inside, built and run on one Mac.
+- An Apple Silicon macOS package with the media server inside, attached to the release.
+- Real use: hosting, joining, voice and noise suppression have been used for real by the project's owner across
+  separate networks, beyond the automated tests.
 - CI on every push to main and every pull request: unit, integration and durability tests; Playwright in Chromium, once directly
   and once with every user going through the tunnel; a smaller, non-blocking set in Firefox, WebKit and an iPhone profile; and the
   desktop app in real Electron on macOS.
 
 **Coming next**
 
-- **Installers.** No release is published, so for now everyone, the host and their friends, runs Hostile from source. The Mac package is not signed or
-  notarized yet, and Windows and Linux packages have not been built.
+- **Installers.** The Mac package is not signed or notarized yet, so macOS asks once before opening it (see
+  [docs/DESKTOP.md](docs/DESKTOP.md)). Windows and Linux packages have not been built.
 - **Browser and phone guests.** A guest build lets a browser tab join over the tunnel, and it passes the tests, but no
-  public page serves it yet. Until one does, friends join from the desktop app, run from source.
-- **Real networks.** Every test so far runs both ends on one machine. Home routers, carrier NAT and guests on mobile
-  data have not been tried.
-- **Real hardware.** Real phones, real microphones by ear, Safari and Firefox file handling, and sleep and wake are
-  still to be checked. There is no auto-update yet.
+  public page serves it yet. Until one does, friends join from the desktop app.
+- **More networks and hardware.** Carrier NAT, mobile data, real phones, Safari and Firefox file handling, and sleep and
+  wake are still to be checked. There is no auto-update yet.
 
 ## Limitations
 

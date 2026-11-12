@@ -92,13 +92,18 @@ who asks again. Old messages keep the old nickname and picture. There is no reco
 **Remove.** Removing someone ends their sessions, socket, call and LiveKit participation at once, and their messages
 stay. With the code they can only ask again, as someone new.
 
-**The session cookie is not HttpOnly for a guest.** A browser keeps cookies per website, and the room is not
-the website the guest's page came from, so the page keeps the session cookie itself, in `localStorage`, and
-hands it to the tunnel. This holds for a guest in the app as well as in a tab. The server still sets `HttpOnly`, but
-nothing here can honour it: any script running in the guest's page can read the cookie, so a cross-site scripting bug
-or a tampered guest site could steal a session, which with an `HttpOnly` cookie it could only ride. The CSRF token
-stays in memory only. This is the price of a tab reaching a host with no certificate. It is kept per host fingerprint,
-so a new code keeps the person, because the host's key belongs to the host and not to the code.
+**A guest's page never holds its session.** A browser keeps cookies per website, and the room is not the website the
+guest's page came from, so the browser cannot keep the room's cookie. Instead the gateway keeps it: each guest's
+connection has its own cookie jar on the host, filled from the server's `Set-Cookie` and sent on with every request,
+and a cookie the guest names itself is dropped. What stays on the device is a signing key (ECDSA P-256), made in the
+page with WebCrypto as non-extractable and kept in IndexedDB, so no script can read it out. Each new connection signs
+a fresh challenge from the server (`/api/auth/device/sign-in`, one use, 60 seconds), and the server answers with the
+session cookie into that connection's jar. The session's token is worked out on the server from its id and the server's
+secret, so every tab of the same device gets the same one. A script in the guest's page can still use the session while
+it runs, as it could ride an `HttpOnly` cookie, but it cannot carry it away. The CSRF token stays in memory only. The key
+is kept per host fingerprint, so a new code keeps the person, because the host's key belongs to the host and not to the
+code. A device from before this change hands its stored token over once (`/api/auth/device/claim`), and in a hosted room
+that old token stops working.
 
 **One code for the whole room.** That has consequences a host should know:
 
