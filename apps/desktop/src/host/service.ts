@@ -282,7 +282,15 @@ export function createHostService(
     media = started;
     started.child.on('exit', () => {
       if (media === started) media = null;
-      afterDeath('media', () => void startMedia(), notReady.has(started) ? 'not-ready' : undefined);
+      afterDeath(
+        'media',
+        () =>
+          void startMedia().catch((err: unknown) => {
+            log.error(`media server: ${messageOf(err)}`);
+            set('media', { state: 'failed' });
+          }),
+        notReady.has(started) ? 'not-ready' : undefined,
+      );
     });
     started.child.on('error', (err) => log.error(`media server: ${messageOf(err)}`));
     await waitForMedia(started);
@@ -354,6 +362,7 @@ export function createHostService(
   };
 
   const prepare = async () => {
+    if (stopping) await stopping;
     secrets ??= createHostSecretStore(hostDir);
     if (!ports) {
       ports = {
@@ -367,8 +376,9 @@ export function createHostService(
     return ports;
   };
 
-  const start = () => {
-    if (active && !starting) return Promise.resolve();
+  const start = async (): Promise<void> => {
+    if (stopping) await stopping;
+    if (active && !starting) return;
     starting ??= (async () => {
       await prepare();
       installBridgePermissions(bridgeSession());
@@ -416,6 +426,7 @@ export function createHostService(
 
   const stopChildren = async () => {
     mayOpenBridge = false;
+    ownerExists = false;
     bridge?.close();
     bridge = null;
     const gatewayChild = gateway;

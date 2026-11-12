@@ -55,7 +55,8 @@ export function reapLeftoverLivekit(hostDir: string): void {
     const ours =
       process.platform === 'win32'
         ? command.toLowerCase().includes('livekit-server')
-        : command.includes('livekit-server') && command.includes(configName(hostDir));
+        : command.includes('livekit-server') &&
+          (command.includes(configName(hostDir)) || command.includes(oldConfigFile(hostDir)));
     if (!ours) return;
     process.kill(pid, 'SIGKILL');
     log.warn('stopped a media server left behind by an earlier run');
@@ -65,6 +66,7 @@ export function reapLeftoverLivekit(hostDir: string): void {
 const configName = (hostDir: string) =>
   `livekit-${createHash('sha256').update(hostDir).digest('hex').slice(0, 16)}.yaml`;
 const configFile = (hostDir: string) => join(hostDir, configName(hostDir));
+const oldConfigFile = (hostDir: string) => join(hostDir, 'livekit.yaml');
 
 export function startLivekit(
   program: string,
@@ -72,6 +74,7 @@ export function startLivekit(
   inputs: LivekitConfigInputs,
 ): LivekitProcess {
   const config = configFile(hostDir);
+  rmSync(oldConfigFile(hostDir), { force: true });
   writeFileSync(config, renderLivekitConfig(inputs), { mode: 0o600 });
   chmodSync(config, 0o600);
 

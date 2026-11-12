@@ -62,7 +62,11 @@ export function openBridgeWindow(
   ipcMain.on(CHANNEL.bridgeReport, listener);
   let closing = false;
   window.webContents.on('render-process-gone', (_event, details) => {
-    if (!closing) onGone(details.reason);
+    if (closing) return;
+    closing = true;
+    ipcMain.removeListener(CHANNEL.bridgeReport, listener);
+    if (!window.isDestroyed()) window.destroy();
+    onGone(details.reason);
   });
   window.on('closed', () => {
     ipcMain.removeListener(CHANNEL.bridgeReport, listener);

@@ -131,14 +131,24 @@ async function hostRoom(
   owner: HostOwnerProfile | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (startedAsGuest) return { ok: false, error: 'Close and open the app again to host a room.' };
+  const wasRunning = host?.running() ?? false;
+  const giveUp = async <T>(answer: T): Promise<T> => {
+    if (!wasRunning && current.settings.get().room !== 'host') {
+      await host!.stop();
+      current.settings.useHostedServer(null);
+      current.livekitUrl = null;
+    }
+    return answer;
+  };
   await prepareHosting(current);
   await startHosting(current);
   if (hostError) return { ok: false, error: hostError };
   if (owner && !host!.hasOwner()) {
     const created = await host!.createOwner(owner);
-    if (!created.ok) return created;
+    if (!created.ok) return giveUp(created);
   }
-  if (!host!.hasOwner()) return { ok: false, error: 'This room needs an owner first.' };
+  if (!host!.hasOwner())
+    return giveUp({ ok: false as const, error: 'This room needs an owner first.' });
   current.settings.setHostOwner(true);
   current.settings.setRoom('host');
   if (owner) {
