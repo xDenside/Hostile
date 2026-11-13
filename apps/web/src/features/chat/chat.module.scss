@@ -18,8 +18,10 @@
   overflow-anchor: none;
 }
 
-.list:has(~ .composerWrap .typing:not(:empty)) > div {
-  padding-bottom: 18px;
+.list:has(~ .composerWrap .typing:not(:empty)) > div::after {
+  content: '';
+  display: block;
+  height: 18px;
 }
 
 .loadingTop,
