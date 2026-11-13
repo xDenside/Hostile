@@ -164,6 +164,15 @@ model MessageAttachment {
   @@map("message_attachments")
 }
 
+model UploadHour {
+  userId String   @db.Uuid
+  hour   DateTime @db.Timestamptz(3)
+  bytes  Int
+
+  @@id([userId, hour])
+  @@map("upload_hours")
+}
+
 model ReadState {
   userId      String   @db.Uuid
   channelId   String   @db.Uuid

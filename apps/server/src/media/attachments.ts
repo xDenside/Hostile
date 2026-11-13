@@ -48,6 +48,14 @@ const SNIFF_BYTES = VIDEO_SNIFF_BYTES;
 
 const MB = 1024 * 1024;
 
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+const allowanceUsed = () =>
+  errors.payloadTooLarge(
+    `You have uploaded ${LIMITS.attachmentDailyBytes / (1024 * MB)} GB of files in the last 24 hours, which is the most one person can. Try again later.`,
+  );
+
 const maxBytesFor = (type: AttachmentType): number =>
   attachmentKind(type) === 'video'
     ? LIMITS.attachmentVideoMaxBytes
@@ -170,6 +178,8 @@ export class AttachmentStore {
 
   private sweeper: NodeJS.Timeout | null = null;
 
+  private readonly uploading = new Map<string, number>();
+
   constructor(
     private readonly db: Db,
     private readonly log: Logger,
@@ -224,7 +234,34 @@ export class AttachmentStore {
       WHERE "messageId" IS NULL AND "createdAt" < ${cutoff}
       RETURNING "id"`;
     await this.removeFiles(removed.map((row) => row.id));
+    await this.db.uploadHour.deleteMany({
+      where: { hour: { lt: new Date(now - DAY_MS - HOUR_MS) } },
+    });
     return removed.length;
+  }
+
+  async storedInLastDay(userId: string, now: number = Date.now()): Promise<number> {
+    const total = await this.db.uploadHour.aggregate({
+      where: { userId, hour: { gt: new Date(now - DAY_MS) } },
+      _sum: { bytes: true },
+    });
+    return total._sum.bytes ?? 0;
+  }
+
+  private async recordStored(userId: string, bytes: number): Promise<void> {
+    const hour = new Date(Math.floor(Date.now() / HOUR_MS) * HOUR_MS);
+    try {
+      await this.db.uploadHour.upsert({
+        where: { userId_hour: { userId, hour } },
+        create: { userId, hour, bytes },
+        update: { bytes: { increment: bytes } },
+      });
+    } catch (err) {
+      this.log.error(
+        { err, userId, bytes },
+        'could not count an upload toward its daily allowance',
+      );
+    }
   }
 
   async removeFiles(ids: string[]): Promise<void> {
@@ -280,8 +317,19 @@ export class AttachmentStore {
       throw errors.payloadTooLarge(
         `That file is too large. An image can be up to ${LIMITS.attachmentImageMaxBytes / MB} MB and a video up to ${LIMITS.attachmentVideoMaxBytes / MB} MB.`,
       );
+    const userId = upload.uploaderId;
+    const stored = await this.storedInLastDay(userId);
+    const left = () => LIMITS.attachmentDailyBytes - stored - (this.uploading.get(userId) ?? 0);
+    if (left() <= 0 || (declared !== null && declared > left())) throw allowanceUsed();
     await this.assertWritable();
     await this.assertRoomFor(declared ?? 0);
+
+    let counted = 0;
+    const count = (bytes: number) => {
+      counted += bytes;
+      this.uploading.set(userId, (this.uploading.get(userId) ?? 0) + bytes);
+      if (left() < 0) throw allowanceUsed();
+    };
 
     const startedAt = Date.now();
     setRequestDeadline(req, UPLOAD_IDLE_MS);
@@ -301,6 +349,7 @@ export class AttachmentStore {
         else {
           head.push(next.value);
           received += next.value.length;
+          count(next.value.length);
         }
       }
       if (received === 0) throw errors.invalidAttachment(400, 'Choose a file to upload.');
@@ -321,6 +370,7 @@ export class AttachmentStore {
         if (next.done) break;
         received += next.value.length;
         if (received > maxBytes) throw tooLarge(type);
+        count(next.value.length);
         if (Date.now() - startedAt > UPLOAD_MAX_MS) throw errors.uploadTooSlow();
         await file.writeFile(next.value);
         if (received - checkedAt >= DISK_CHECK_EVERY_BYTES) {
@@ -380,6 +430,7 @@ export class AttachmentStore {
         });
         throw err;
       }
+      await this.recordStored(userId, received);
       return row;
     } catch (err) {
       if (err instanceof HttpError) throw err;
@@ -394,6 +445,9 @@ export class AttachmentStore {
       }
       throw err;
     } finally {
+      const still = (this.uploading.get(userId) ?? 0) - counted;
+      if (still > 0) this.uploading.set(userId, still);
+      else this.uploading.delete(userId);
       await body.return(undefined);
       await file?.close().catch(() => undefined);
       await rm(tempPath, { force: true }).catch((err: unknown) => {

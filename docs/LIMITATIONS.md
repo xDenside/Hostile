@@ -78,7 +78,7 @@ host-on-your-PC design has not built or proved yet.
 - **Webcams.** Voice tokens do not even grant the camera source. Voice and screen sharing came first
   deliberately.
 - **Link previews, and attachments other than images and videos.** Previews add fetch-side request
-  forgery concerns. Attachments are images (25 MB) and videos (200 MB), up to ten on a message, and
+  forgery concerns. Attachments are images (10 MB) and videos (30 MB), up to ten on a message, at most 1 GB per person in any 24 hours, and
   nothing is transcoded: a video plays only where the browser can decode it. They are stored and
   served as uploaded apart from location data, which comes out at upload, as it does from a member's
   avatar and banner ([SECURITY.md](SECURITY.md)). What that does not reach stays readable by anyone in

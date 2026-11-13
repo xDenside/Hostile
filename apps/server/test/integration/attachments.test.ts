@@ -547,8 +547,8 @@ describe('refused uploads', () => {
 });
 
 describe('size limits', () => {
-  const imageMessage = 'That image is too large. An image can be up to 25 MB.';
-  const videoMessage = 'That video is too large. A video can be up to 200 MB.';
+  const imageMessage = 'That image is too large. An image can be up to 10 MB.';
+  const videoMessage = 'That video is too large. A video can be up to 30 MB.';
 
   test('an image of exactly the limit is accepted, and one byte more is a 413', async () => {
     const channel = await newChannel();
@@ -631,6 +631,80 @@ describe('size limits', () => {
     const answer = await statusForHeaders(channel.id, LIMITS.attachmentImageMaxBytes + 1, head);
     expect(answer).toMatch(/^HTTP\/1\.1 413 /);
     await expectNothingStored(channel.id);
+  });
+});
+
+describe('the daily allowance', () => {
+  const HOUR = 60 * 60 * 1000;
+  const allowanceMessage =
+    'You have uploaded 1 GB of files in the last 24 hours, which is the most one person can. Try again later.';
+
+  async function memberWhoStored(bytes: number, hoursAgo = 0) {
+    const user = await createUser(api.ctx);
+    const session = await loginDesktop(api, user);
+    const hour = new Date(Math.floor((Date.now() - hoursAgo * HOUR) / HOUR) * HOUR);
+    await api.ctx.db.uploadHour.create({ data: { userId: user.id, hour, bytes } });
+    return { id: user.id, session };
+  }
+
+  test('what fits in the allowance is stored, and one byte past it is a 413', async () => {
+    const channel = await newChannel();
+    const member = await memberWhoStored(LIMITS.attachmentDailyBytes - 2000);
+
+    const first = await upload(channel.id, buildPng(16, 16, 1000), { session: member.session });
+    expect(first.status).toBe(201);
+
+    const over = await upload(channel.id, buildPng(16, 16, 1001), { session: member.session });
+    expect(over.status).toBe(413);
+    expect(over.body.error).toEqual({ code: 'payload_too_large', message: allowanceMessage });
+
+    const last = await upload(channel.id, buildPng(16, 16, 1000), { session: member.session });
+    expect(last.status).toBe(201);
+    expect(await api.ctx.attachments.storedInLastDay(member.id)).toBe(LIMITS.attachmentDailyBytes);
+    expect(await rowsIn(channel.id)).toBe(2);
+    await waitFor('temp files to be gone', () => tempFiles().length === 0);
+  });
+
+  test('a body with no length is cut off where the allowance ends', async () => {
+    const channel = await newChannel();
+    const member = await memberWhoStored(LIMITS.attachmentDailyBytes - 3 * MB);
+    const answer = await upload(channel.id, streamOf(MP4.bytes, 8 * MB), {
+      session: member.session,
+      init: streaming,
+    });
+    expect(answer.status).toBe(413);
+    expect(answer.body.error.message).toBe(allowanceMessage);
+    await expectNothingStored(channel.id);
+  });
+
+  test('deleting a file gives none of the allowance back', async () => {
+    const channel = await newChannel();
+    const member = await memberWhoStored(LIMITS.attachmentDailyBytes - 1000);
+    const file = await uploaded(channel.id, buildPng(16, 16, 1000), { session: member.session });
+    expect((await discard(file.id, bearerAuth(member.session))).status).toBe(204);
+
+    const again = await upload(channel.id, buildPng(16, 16, 1000), { session: member.session });
+    expect(again.status).toBe(413);
+    expect(again.body.error.message).toBe(allowanceMessage);
+  });
+
+  test('one member at the allowance does not stop another', async () => {
+    const channel = await newChannel();
+    await memberWhoStored(LIMITS.attachmentDailyBytes);
+    const other = await memberWhoStored(0);
+    const answer = await upload(channel.id, PNG.bytes, { session: other.session });
+    expect(answer.status).toBe(201);
+  });
+
+  test('what was stored over a day ago no longer counts, and the sweep forgets it', async () => {
+    const channel = await newChannel();
+    const member = await memberWhoStored(LIMITS.attachmentDailyBytes, 25);
+    const answer = await upload(channel.id, PNG.bytes, { session: member.session });
+    expect(answer.status).toBe(201);
+
+    await api.ctx.attachments.sweep(Date.now() + 2 * HOUR);
+    const left = await api.ctx.db.uploadHour.findMany({ where: { userId: member.id } });
+    expect(left.map((row) => row.bytes)).toEqual([PNG.bytes.length]);
   });
 });
 

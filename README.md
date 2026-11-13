@@ -44,8 +44,8 @@ That is the whole sign-up. There are no accounts, passwords or emails anywhere.
   never rendered as HTML.
 - **Replies and forwards.** A reply quotes the original, stays current if it is edited or deleted, and jumps to it on a
   click, however far back. A forward copies a message, with its pictures and videos, into another channel.
-- **Images and videos.** Paste, drag in or pick up to 10 per message: images up to 25 MB, MP4, MOV and WebM videos up
-  to 200 MB. Uploads show real progress, with Retry and Cancel. Videos play with seeking, and nothing is re-encoded.
+- **Images and videos.** Paste, drag in or pick up to 10 per message: images up to 10 MB, MP4, MOV and WebM videos up
+  to 30 MB, and at most 1 GB per person in any 24 hours, so nobody can fill the host's disk. Uploads show real progress, with Retry and Cancel. Videos play with seeking, and nothing is re-encoded.
   Other file types, such as documents and archives, are not supported.
 - **Who is around.** Typing indicators, online and offline with a custom status, and an unread dot on each channel.
 - **Chat beside every call.** Each voice channel has its own text chat next to the call.

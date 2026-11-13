@@ -62,11 +62,11 @@ describe('what may be attached', () => {
     const video = LIMITS.attachmentVideoMaxBytes;
     expect(refusalFor(file('a.png', 'image/png', image))).toBeNull();
     expect(refusalFor(file('a.png', 'image/png', image + 1))).toContain(
-      'An image can be up to 25 MB',
+      'An image can be up to 10 MB',
     );
     expect(refusalFor(file('a.mp4', 'video/mp4', video))).toBeNull();
     expect(refusalFor(file('a.mp4', 'video/mp4', video + 1))).toContain(
-      'A video can be up to 200 MB',
+      'A video can be up to 30 MB',
     );
   });
 

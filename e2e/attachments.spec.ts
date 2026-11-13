@@ -402,9 +402,9 @@ test.describe('choosing a file', () => {
     await attach(alice, {
       name: 'huge.png',
       mimeType: 'image/png',
-      buffer: Buffer.alloc(25 * 1024 * 1024 + 1),
+      buffer: Buffer.alloc(10 * 1024 * 1024 + 1),
     });
-    await expect(notice).toContainText('"huge.png" is too large. An image can be up to 25 MB.');
+    await expect(notice).toContainText('"huge.png" is too large. An image can be up to 10 MB.');
     await expect(tray).toHaveCount(0);
 
     await attach(alice, {
