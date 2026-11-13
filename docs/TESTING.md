@@ -254,7 +254,7 @@ The host's window holds a microphone permission in these tests, because a page w
 address, and on a machine where that address does not reach itself a guest with no permissions could never connect. Most
 tests grant the guest a microphone too, so `tunnel-chat.spec.ts` has one guest who has granted nothing.
 
-The last count with `--project=chromium` was 196 of 196. In tunnel mode a removed person is cut off and lands on the join
+The last count with `--project=chromium` was 225 of 225. In tunnel mode a removed person is cut off and lands on the join
 screen with the host's message, not on the join card, so "a person joins, and is then removed" in `admin.spec.ts` checks for
 that message there.
 

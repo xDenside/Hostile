@@ -50,7 +50,22 @@ import {
   withLiveMic,
   type VoiceServerNotice,
 } from './status';
+import { tabTitle } from '../../lib/tab-title';
 import styles from './layout.module.scss';
+
+function TabTitle() {
+  const unread = useCommunity(
+    (s) => s.channels.filter((channel) => isUnread(channel, s.readStates)).length,
+  );
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\+?\) /, '');
+    document.title = tabTitle(base, unread);
+    return () => {
+      document.title = base;
+    };
+  }, [unread]);
+  return null;
+}
 
 export function AppShell() {
   const self = useSession((s) => s.user!);
@@ -76,6 +91,7 @@ export function AppShell() {
 
   return (
     <div className={styles.shell}>
+      <TabTitle />
       <Sidebar channels={channels} selectedId={selected?.id ?? null} />
       <MainColumn channel={selected} ready={ready} />
       {selected?.type !== 'voice' && <MemberPanel />}

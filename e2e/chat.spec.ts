@@ -126,6 +126,7 @@ test.describe('text chat between two users', () => {
     await alice.waitForTimeout(3200);
     const generalButton = channelButton(bob, 'general');
     await expect(generalButton.getByLabel('Unread messages')).toBeVisible({ timeout: 15_000 });
+    await expect(bob).toHaveTitle(/^\(\d+\) \S/);
     await generalButton.click();
     await expect(generalButton.getByLabel('Unread messages')).toHaveCount(0, { timeout: 15_000 });
 
